@@ -40,8 +40,13 @@ Repository lives at `/opt/data/goland_data/cliproxy-panel-updater`
     `WRITABLE_PATH/static` → `<config dir>/static`; final file is
     `<static dir>/management.html`; writes are atomic (temp file + rename).
 - Plugins receive only their own config subtree (`config_yaml`) at
-  `plugin.register`/`plugin.reconfigure`. They do NOT see the host's main
-  config file path, `remote-management` section, or resolved static dir.
+  `plugin.register`/`plugin.reconfigure`. The host does not push its main
+  config (e.g. the `remote-management` section) to plugins. However, the
+  plugin runs in the host process, so it shares the working directory,
+  environment, and command line: the host locates its config file via the
+  `--config` flag, defaulting to `<cwd>/config.yaml`
+  (`cmd/server/main.go`), and the plugin can apply the same rule to read
+  the file directly.
 
 ## Approach (selected: Option A)
 
@@ -73,25 +78,30 @@ plugins:
   configs:
     panel-updater:
       enabled: true
-      # All fields below are optional.
-      panel-github-repository: ""   # overrides update source; same syntax as remote-management.panel-github-repository
-      static-dir: ""                # overrides the target directory for management.html
 ```
 
-Config resolution inside the plugin:
-1. `static-dir` from plugin config, if set.
-2. `MANAGEMENT_STATIC_PATH` env (same semantics as the host: if it ends in
-   `management.html`, use its parent dir).
-3. `WRITABLE_PATH` env → `<WRITABLE_PATH>/static`.
-4. Current working directory → `./static` (the host resolves relative
-   paths against its working dir; when the host runs with the default
-   `config.yaml` in CWD this matches the host's own `<config dir>/static`).
+No plugin-specific configuration. The plugin reads the values it needs
+directly from the host's own config file at update time (always fresh,
+no duplicated settings):
 
-Because the plugin cannot read `remote-management.panel-github-repository`
-from the host config, the plugin exposes its own
-`panel-github-repository` config field with identical syntax. Empty means
-the default official repository. `ConfigFields` metadata declares both
-fields so management clients can render them.
+1. **Host config file location** — same rule as the host binary: the
+   `--config` value from `os.Args` if present, else `<cwd>/config.yaml`.
+   The plugin runs in-process, so `os.Args` and the working directory are
+   the host's own.
+2. **`remote-management.panel-github-repository`** — parsed from that
+   YAML file (only this scalar is read; unknown fields ignored). Empty or
+   unparsable → default official repository
+   `https://github.com/router-for-me/Cli-Proxy-API-Management-Center`.
+3. **`proxy-url`** — not read by the plugin; downloads go through
+   `host.http.do`, which already applies the host's proxy.
+4. **Static dir** — same resolution chain as the host's
+   `managementasset.StaticDir`: `MANAGEMENT_STATIC_PATH` env (if it ends
+   in `management.html`, use its parent dir) → `WRITABLE_PATH/static` →
+   `<config file dir>/static`.
+
+If the config file cannot be read (e.g. Postgres-backed config), the
+status endpoint reports it and updates proceed with the default
+repository.
 
 ## Routes
 
@@ -100,14 +110,15 @@ Registered at `management.register`:
 - Resource (no auth, GET):
   - `GET /v0/resource/plugins/panel-updater/` — single self-contained HTML
     page (inline CSS/JS, no external assets). Menu label: `Panel Updater`.
-    The page shows: current resolved static dir + file presence/size/mtime
-    placeholders (filled via the status API), a management-key input
-    (stored in `localStorage`), a "Check status" button and an
-    "Update now" button.
+    The page shows: resolved static dir, config file path, effective
+    panel repository, file presence/size/mtime/hash (filled via the
+    status API), a management-key input (stored in `localStorage`), a
+    "Check status" button and an "Update now" button.
 - Management (host-enforced auth):
   - `GET /v0/management/plugins/panel-updater/status` — returns JSON:
-    resolved `static_dir`, `file_path`, `exists`, `size`, `modified_at`,
-    `local_sha256`, effective `release_url`.
+    `config_file` (path + readable flag), resolved `static_dir`,
+    `file_path`, `exists`, `size`, `modified_at`, `local_sha256`,
+    effective `panel_github_repository` and `release_url`.
   - `POST /v0/management/plugins/panel-updater/update` — performs the
     update, returns JSON: `updated` (bool), `hash`, `source`
     (`github` | `fallback` | `up-to-date`), `message`.
@@ -120,29 +131,31 @@ The browser page calls the two management endpoints with
 
 Mirrors `EnsureLatestManagementHTML`:
 
-1. Resolve static dir (rules above); `mkdir -p` it.
-2. Resolve release URL from `panel-github-repository` (same parsing rules
+1. Locate and parse the host config file;
+   read `remote-management.panel-github-repository`.
+2. Resolve static dir (rules above); `mkdir -p` it.
+3. Resolve release URL from the repository value (same parsing rules
    as the host's `resolveReleaseURL`: `api.github.com` URLs get
    `/releases/latest` appended if missing; `github.com/owner/repo` becomes
    `https://api.github.com/repos/owner/repo/releases/latest`; anything
    else falls back to the default).
-3. `host.http.do` GET release JSON (`Accept: application/vnd.github+json`,
+4. `host.http.do` GET release JSON (`Accept: application/vnd.github+json`,
    `User-Agent: cliproxy-panel-updater`), forwarding the
    `host_callback_id` received in the `management.handle` request.
-4. Find asset named `management.html`; read its `digest`
+5. Find asset named `management.html`; read its `digest`
    (`sha256:<hex>`) if present.
-5. If local file exists and its SHA-256 equals the remote digest → return
+6. If local file exists and its SHA-256 equals the remote digest → return
    `source: "up-to-date"` without downloading.
-6. `host.http.do` GET `browser_download_url`; verify SHA-256 against the
+7. `host.http.do` GET `browser_download_url`; verify SHA-256 against the
    digest when present; on mismatch → error, do not write.
-7. Atomic write: temp file in the static dir + `os.Rename` to
+8. Atomic write: temp file in the static dir + `os.Rename` to
    `management.html`.
-8. On any GitHub-path failure (steps 3–6): download
+9. On any GitHub-path failure (steps 4–7): download
    `https://cpamc.router-for.me/` via `host.http.do`, write atomically,
    return `source: "fallback"` with a warning message (no digest
    verification possible).
-9. A mutex serializes concurrent update requests (second caller gets
-   `409` with a "update already in progress" message).
+10. A mutex serializes concurrent update requests (second caller gets
+    `409` with a "update already in progress" message).
 
 Concurrency with the host's own auto-updater is acceptable: both sides
 write atomically via rename, so the file is never observed truncated;
@@ -156,7 +169,8 @@ cliproxy-panel-updater/
 ├── main.go                    # package main: cgo preamble, cliproxy_plugin_init,
 │                              # dispatch table, host.http.do bridge (implements updater.HTTPDoer)
 ├── internal/plugin/
-│   ├── register.go            # register/reconfigure payloads, config parsing
+│   ├── register.go            # register/reconfigure payloads
+│   ├── hostconfig.go          # locate host config file (--config / cwd), read panel-github-repository, resolve static dir
 │   ├── management.go          # management.register + management.handle routing
 │   ├── management_test.go     # route dispatch / envelope tests
 │   ├── page.go                # embedded HTML page (go:embed page.html)
@@ -221,7 +235,9 @@ The README instructs: download the asset for your platform, rename it to
 
 - `updater_test.go`: unit tests for `resolveReleaseURL` parity cases,
   digest verification (match/mismatch/absent), up-to-date short-circuit,
-  fallback path, atomic write behavior — all against a fake `httpDoer`.
+  fallback path, atomic write behavior — all against a fake `HTTPDoer`.
+- `hostconfig` tests: `--config` flag extraction from an args slice,
+  `panel-github-repository` YAML extraction, static dir resolution chain.
 - `management_test.go`: route dispatch and JSON envelope round-trips.
 - CI runs `gofmt` check + `go vet` + `go test ./...` before the matrix
   build.
