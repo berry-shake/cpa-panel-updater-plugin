@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Panel Updater · CLI Proxy API</title>
+  <title data-i18n="title">Panel Updater · CLI Proxy API</title>
   <style>
     :root {
       color-scheme: light dark;
@@ -31,7 +31,7 @@
       --radius-md: 10px;
       --radius-lg: 14px;
       --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Roboto Mono", monospace;
-      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
     }
     [data-theme='white'] {
       --bg-base: #ffffff;
@@ -115,6 +115,38 @@
       margin: 2px 0 0;
       color: var(--text-secondary);
       font-size: 13px;
+    }
+    .hero-side {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .lang-switch {
+      display: inline-flex;
+      background: var(--bg-muted);
+      border: 1px solid var(--border-subtle);
+      border-radius: 999px;
+      padding: 3px;
+    }
+    .lang-switch button {
+      appearance: none;
+      background: transparent;
+      color: var(--text-secondary);
+      border: none;
+      padding: 4px 12px;
+      font: inherit;
+      font-size: 12px;
+      font-weight: 600;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s;
+    }
+    .lang-switch button:hover { color: var(--text-primary); }
+    .lang-switch button.active {
+      background: var(--bg-elevated);
+      color: var(--text-primary);
+      box-shadow: var(--shadow-sm);
     }
     .health {
       display: inline-flex;
@@ -205,33 +237,17 @@
       border-color: var(--border-strong);
     }
     .btn-secondary:hover:not(:disabled) { background: var(--bg-muted); }
-    .btn-ghost {
-      background: transparent;
-      color: var(--text-secondary);
-      border-color: transparent;
-      padding: 6px 10px;
-      min-height: auto;
-      font-weight: 500;
-    }
-    .btn-ghost:hover:not(:disabled) { color: var(--text-primary); background: var(--bg-muted); }
-    .spinner {
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-      border: 2px solid rgba(255, 255, 255, 0.35);
-      border-top-color: #ffffff;
-      border-radius: 50%;
-      animation: spin 0.7s linear infinite;
-    }
-    .btn-secondary .spinner {
-      border-color: rgba(0, 0, 0, 0.15);
-      border-top-color: var(--text-primary);
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
     .action-hint {
       margin-top: 10px;
       font-size: 12px;
       color: var(--text-muted);
+    }
+    .action-hint code {
+      font-family: var(--font-mono);
+      background: var(--bg-muted);
+      border-radius: 4px;
+      padding: 1px 5px;
+      font-size: 12px;
     }
     .grid {
       display: grid;
@@ -306,20 +322,26 @@
         </svg>
       </div>
       <div>
-        <h1>Panel Updater</h1>
-        <p>Refresh the CLI Proxy API management panel from GitHub.</p>
+        <h1 data-i18n="hero.title">Panel Updater</h1>
+        <p data-i18n="hero.subtitle">Refresh the CLI Proxy API management panel from GitHub.</p>
       </div>
     </div>
-    <div class="health" id="health" data-state="unknown" role="status" aria-live="polite">
-      <span class="dot" aria-hidden="true"></span>
-      <span id="health-label">Not checked</span>
+    <div class="hero-side">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <button type="button" data-lang="en">EN</button>
+        <button type="button" data-lang="zh">中文</button>
+      </div>
+      <div class="health" id="health" data-state="unknown" role="status" aria-live="polite">
+        <span class="dot" aria-hidden="true"></span>
+        <span id="health-label" data-i18n="health.unknown">Not checked</span>
+      </div>
     </div>
   </header>
 
   <section class="card">
     <div class="card-header">
-      <h2>Actions</h2>
-      <span class="hint">Runs the same digest-verified update as the CLI</span>
+      <h2 data-i18n="actions.title">Actions</h2>
+      <span class="hint" data-i18n="actions.hint">Runs the same digest-verified update as the CLI</span>
     </div>
     <div class="card-body">
       <div class="actions">
@@ -329,75 +351,198 @@
             <polyline points="7 8 12 3 17 8"/>
             <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>
           </svg>
-          <span class="btn-label">Update now</span>
+          <span class="btn-label" data-i18n="actions.update">Update now</span>
         </button>
         <button id="status-button" class="btn btn-secondary" type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="1 4 1 10 7 10"/>
             <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
           </svg>
-          <span class="btn-label">Refresh status</span>
+          <span class="btn-label" data-i18n="actions.refresh">Refresh status</span>
         </button>
       </div>
-      <p class="action-hint">The update replaces <code>management.html</code> in place after verifying the GitHub release SHA-256.</p>
+      <p class="action-hint" data-i18n-html="actions.description">The update replaces <code>management.html</code> in place after verifying the GitHub release SHA-256.</p>
     </div>
   </section>
 
   <section class="card">
     <div class="card-header">
-      <h2>Panel state</h2>
-      <span class="hint" id="state-updated">—</span>
+      <h2 data-i18n="state.title">Panel state</h2>
+      <span class="hint" id="state-updated" data-i18n="state.notChecked">Not checked yet</span>
     </div>
     <div class="card-body">
       <div class="grid">
         <div class="field">
-          <span class="label">Local file</span>
-          <span class="value" id="field-file-state">Unknown</span>
+          <span class="label" data-i18n="field.file">Local file</span>
+          <span class="value" id="field-file-state" data-i18n="value.unknown">Unknown</span>
         </div>
         <div class="field">
-          <span class="label">Size</span>
+          <span class="label" data-i18n="field.size">Size</span>
           <span class="value" id="field-size">—</span>
         </div>
         <div class="field">
-          <span class="label">Modified</span>
+          <span class="label" data-i18n="field.modified">Modified</span>
           <span class="value" id="field-modified">—</span>
         </div>
         <div class="field">
-          <span class="label">SHA-256</span>
+          <span class="label" data-i18n="field.hash">SHA-256</span>
           <span class="value" id="field-hash">—</span>
         </div>
         <div class="field">
-          <span class="label">Panel path</span>
+          <span class="label" data-i18n="field.filePath">Panel path</span>
           <span class="value" id="field-file-path">—</span>
         </div>
         <div class="field">
-          <span class="label">Static directory</span>
+          <span class="label" data-i18n="field.staticDir">Static directory</span>
           <span class="value" id="field-static-dir">—</span>
         </div>
         <div class="field">
-          <span class="label">GitHub repository</span>
+          <span class="label" data-i18n="field.repository">GitHub repository</span>
           <span class="value" id="field-repository">—</span>
         </div>
         <div class="field">
-          <span class="label">Release API</span>
+          <span class="label" data-i18n="field.releaseUrl">Release API</span>
           <span class="value" id="field-release-url">—</span>
         </div>
         <div class="field">
-          <span class="label">Host config</span>
+          <span class="label" data-i18n="field.configFile">Host config</span>
           <span class="value" id="field-config-file">—</span>
         </div>
       </div>
     </div>
-    <pre class="log" id="log" data-state="idle">Ready. Click <b>Refresh status</b> to load the current panel state.</pre>
+    <pre class="log" id="log" data-state="idle" data-i18n-html="log.idle">Ready. Click <b>Refresh status</b> to load the current panel state.</pre>
   </section>
 
   <footer>
-    Managed by the panel-updater plugin ·
-    <a href="https://github.com/berry-shake/cliproxy-panel-updater" target="_blank" rel="noopener">source</a>
+    <span data-i18n="footer.text">Managed by the panel-updater plugin</span> ·
+    <a href="https://github.com/berry-shake/cliproxy-panel-updater" target="_blank" rel="noopener" data-i18n="footer.source">source</a>
   </footer>
 </main>
 <script>
 (() => {
+  const LANG_KEY = 'cliproxy-panel-updater-lang';
+  const messages = {
+    en: {
+      title: 'Panel Updater · CLI Proxy API',
+      'hero.title': 'Panel Updater',
+      'hero.subtitle': 'Refresh the CLI Proxy API management panel from GitHub.',
+      'health.unknown': 'Not checked',
+      'health.ok': 'Panel present',
+      'health.missing': 'Panel missing',
+      'health.statusFailed': 'Status failed',
+      'health.updateFailed': 'Update failed',
+      'actions.title': 'Actions',
+      'actions.hint': 'Runs the same digest-verified update as the CLI',
+      'actions.update': 'Update now',
+      'actions.refresh': 'Refresh status',
+      'actions.working': 'Working…',
+      'actions.description': 'The update replaces <code>management.html</code> in place after verifying the GitHub release SHA-256.',
+      'state.title': 'Panel state',
+      'state.notChecked': 'Not checked yet',
+      'state.checkedAt': 'Checked {time}',
+      'field.file': 'Local file',
+      'field.size': 'Size',
+      'field.modified': 'Modified',
+      'field.hash': 'SHA-256',
+      'field.filePath': 'Panel path',
+      'field.staticDir': 'Static directory',
+      'field.repository': 'GitHub repository',
+      'field.releaseUrl': 'Release API',
+      'field.configFile': 'Host config',
+      'value.present': 'Present',
+      'value.missing': 'Missing',
+      'value.unknown': 'Unknown',
+      'value.unreadable': ' (unreadable)',
+      'log.idle': 'Ready. Click <b>Refresh status</b> to load the current panel state.',
+      'log.fetching': 'Fetching status…',
+      'log.loaded': 'Status loaded successfully.',
+      'log.statusFailed': 'Failed to load status: {msg}',
+      'log.updating': 'Downloading latest release and verifying digest…',
+      'log.updateCompleted': 'Update completed.',
+      'log.updateFailed': 'Update failed: {msg}',
+      'log.source': 'source: {value}',
+      'log.hash': 'sha256: {value}',
+      'log.updated': 'updated: {value}',
+      'footer.text': 'Managed by the panel-updater plugin',
+      'footer.source': 'source',
+    },
+    zh: {
+      title: '面板更新器 · CLI Proxy API',
+      'hero.title': '面板更新器',
+      'hero.subtitle': '从 GitHub 拉取并刷新 CLI Proxy API 管理面板。',
+      'health.unknown': '未检查',
+      'health.ok': '面板已就绪',
+      'health.missing': '面板缺失',
+      'health.statusFailed': '状态获取失败',
+      'health.updateFailed': '更新失败',
+      'actions.title': '操作',
+      'actions.hint': '与 CLI 使用同一套摘要校验的更新流程',
+      'actions.update': '立即更新',
+      'actions.refresh': '刷新状态',
+      'actions.working': '处理中…',
+      'actions.description': '更新前会校验 GitHub 发布的 SHA-256 摘要，然后原子替换 <code>management.html</code>。',
+      'state.title': '面板状态',
+      'state.notChecked': '尚未检查',
+      'state.checkedAt': '检查时间：{time}',
+      'field.file': '本地文件',
+      'field.size': '体积',
+      'field.modified': '修改时间',
+      'field.hash': 'SHA-256',
+      'field.filePath': '面板路径',
+      'field.staticDir': '静态目录',
+      'field.repository': 'GitHub 仓库',
+      'field.releaseUrl': 'Release API',
+      'field.configFile': '主机配置',
+      'value.present': '存在',
+      'value.missing': '缺失',
+      'value.unknown': '未知',
+      'value.unreadable': '（无法读取）',
+      'log.idle': '就绪。点击 <b>刷新状态</b> 即可加载当前面板状态。',
+      'log.fetching': '正在获取状态…',
+      'log.loaded': '状态加载成功。',
+      'log.statusFailed': '状态加载失败：{msg}',
+      'log.updating': '正在下载最新 release 并校验摘要…',
+      'log.updateCompleted': '更新完成。',
+      'log.updateFailed': '更新失败：{msg}',
+      'log.source': '来源：{value}',
+      'log.hash': '摘要：{value}',
+      'log.updated': '已更新：{value}',
+      'footer.text': '由 panel-updater 插件驱动',
+      'footer.source': '源代码',
+    },
+  };
+
+  function detectDefaultLang() {
+    const list = navigator.languages && navigator.languages.length ? navigator.languages : [navigator.language || 'en'];
+    for (const raw of list) {
+      const tag = (raw || '').toLowerCase();
+      if (tag.startsWith('zh')) return 'zh';
+      if (tag.startsWith('en')) return 'en';
+    }
+    return 'en';
+  }
+
+  function initialLang() {
+    try {
+      const stored = localStorage.getItem(LANG_KEY);
+      if (stored && messages[stored]) return stored;
+    } catch (_) { /* ignore */ }
+    return detectDefaultLang();
+  }
+
+  let currentLang = initialLang();
+
+  function t(key, params) {
+    const bundle = messages[currentLang] || messages.en;
+    let template = bundle[key];
+    if (template === undefined) template = messages.en[key];
+    if (template === undefined) return key;
+    if (params) {
+      return template.replace(/\{(\w+)\}/g, (m, name) => (params[name] !== undefined ? String(params[name]) : m));
+    }
+    return template;
+  }
+
   function applyPanelTheme() {
     let theme = 'auto';
     try {
@@ -436,29 +581,54 @@
   const fieldReleaseURL = document.getElementById('field-release-url');
   const fieldConfigFile = document.getElementById('field-config-file');
 
-  function setLog(state, message) {
-    log.dataset.state = state;
-    if (message instanceof Node) {
-      log.textContent = '';
-      log.appendChild(message);
-    } else {
-      log.textContent = message;
-    }
+  const uiState = {
+    health: 'unknown',
+    log: { state: 'idle', key: 'log.idle', params: null, html: true },
+    stateUpdated: { key: 'state.notChecked', params: null },
+    fileState: 'unknown', // unknown | present | missing
+    configFileValue: null, // raw string when known, or null
+    configFileReadable: true,
+    lastStatus: null,
+    lastCheckedAt: null,
+  };
+
+  function setHealth(state, key) {
+    uiState.health = state;
+    health.dataset.state = state;
+    healthLabel.textContent = t(key);
+    healthLabel.dataset.i18n = key;
   }
 
-  function setHealth(state, label) {
-    health.dataset.state = state;
-    healthLabel.textContent = label;
+  function setLog(state, key, params, html) {
+    uiState.log = { state, key, params: params || null, html: !!html };
+    log.dataset.state = state;
+    if (html) {
+      log.innerHTML = t(key, params);
+      log.dataset.i18nHtml = key;
+      delete log.dataset.i18n;
+    } else {
+      log.textContent = t(key, params);
+      log.dataset.i18n = key;
+      delete log.dataset.i18nHtml;
+    }
+    log.dataset.params = params ? JSON.stringify(params) : '';
   }
 
   function setBusy(button, busy) {
     button.disabled = busy;
     const label = button.querySelector('.btn-label');
+    if (!label) return;
     if (busy) {
-      if (!button.dataset.originalLabel) button.dataset.originalLabel = label.textContent;
-      label.textContent = 'Working…';
-    } else if (button.dataset.originalLabel) {
-      label.textContent = button.dataset.originalLabel;
+      if (!label.dataset.originalI18n) label.dataset.originalI18n = label.dataset.i18n || '';
+      label.dataset.i18n = 'actions.working';
+      label.textContent = t('actions.working');
+    } else if (label.dataset.originalI18n !== undefined) {
+      const original = label.dataset.originalI18n;
+      if (original) {
+        label.dataset.i18n = original;
+        label.textContent = t(original);
+      }
+      delete label.dataset.originalI18n;
     }
   }
 
@@ -471,13 +641,19 @@
     return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
   }
 
+  function localeTag() { return currentLang === 'zh' ? 'zh-CN' : 'en-US'; }
+
   function formatWhen(iso) {
     if (!iso) return '—';
     try {
       const parsed = new Date(iso);
       if (isNaN(parsed.valueOf())) return iso;
-      return parsed.toLocaleString();
+      return parsed.toLocaleString(localeTag());
     } catch (_) { return iso; }
+  }
+
+  function formatTime(date) {
+    try { return date.toLocaleTimeString(localeTag()); } catch (_) { return date.toISOString(); }
   }
 
   function dim(node, value) {
@@ -490,6 +666,66 @@
     }
   }
 
+  function renderConfigFileField() {
+    if (uiState.configFileValue) {
+      fieldConfigFile.classList.remove('dim');
+      fieldConfigFile.textContent = uiState.configFileValue + (uiState.configFileReadable ? '' : t('value.unreadable'));
+    } else {
+      dim(fieldConfigFile, '');
+    }
+  }
+
+  function renderFileStateField() {
+    if (uiState.fileState === 'unknown') {
+      fieldFileState.dataset.i18n = 'value.unknown';
+      fieldFileState.textContent = t('value.unknown');
+    } else if (uiState.fileState === 'present') {
+      fieldFileState.dataset.i18n = 'value.present';
+      fieldFileState.textContent = t('value.present');
+    } else if (uiState.fileState === 'missing') {
+      fieldFileState.dataset.i18n = 'value.missing';
+      fieldFileState.textContent = t('value.missing');
+    }
+    fieldFileState.classList.remove('dim');
+  }
+
+  function renderStatus(data) {
+    uiState.lastStatus = data;
+    uiState.lastCheckedAt = new Date();
+    if (data.exists) {
+      uiState.fileState = 'present';
+      setHealth('ok', 'health.ok');
+    } else {
+      uiState.fileState = 'missing';
+      setHealth('missing', 'health.missing');
+    }
+    renderFileStateField();
+    dim(fieldSize, data.exists ? formatBytes(data.size) : '');
+    dim(fieldModified, data.exists ? formatWhen(data.modified_at) : '');
+    dim(fieldHash, data.local_sha256 || '');
+    dim(fieldFilePath, data.file_path);
+    dim(fieldStaticDir, data.static_dir);
+    dim(fieldRepository, data.panel_github_repository);
+    dim(fieldReleaseURL, data.release_url);
+    if (data.config_file && data.config_file.path) {
+      uiState.configFileValue = data.config_file.path;
+      uiState.configFileReadable = data.config_file.readable !== false;
+    } else {
+      uiState.configFileValue = null;
+      uiState.configFileReadable = true;
+    }
+    renderConfigFileField();
+    uiState.stateUpdated = { key: 'state.checkedAt', params: { time: formatTime(uiState.lastCheckedAt) } };
+    renderStateUpdated();
+  }
+
+  function renderStateUpdated() {
+    if (!uiState.stateUpdated) return;
+    stateUpdated.dataset.i18n = uiState.stateUpdated.key;
+    stateUpdated.dataset.params = uiState.stateUpdated.params ? JSON.stringify(uiState.stateUpdated.params) : '';
+    stateUpdated.textContent = t(uiState.stateUpdated.key, uiState.stateUpdated.params);
+  }
+
   async function api(path) {
     const response = await fetch(path, { method: 'GET', cache: 'no-store' });
     const text = await response.text();
@@ -499,42 +735,16 @@
     return data;
   }
 
-  function renderStatus(data) {
-    if (data.exists) {
-      setHealth('ok', 'Panel present');
-      fieldFileState.classList.remove('dim');
-      fieldFileState.textContent = 'Present';
-    } else {
-      setHealth('missing', 'Panel missing');
-      fieldFileState.classList.remove('dim');
-      fieldFileState.textContent = 'Missing';
-    }
-    dim(fieldSize, data.exists ? formatBytes(data.size) : '');
-    dim(fieldModified, data.exists ? formatWhen(data.modified_at) : '');
-    dim(fieldHash, data.local_sha256 || '');
-    dim(fieldFilePath, data.file_path);
-    dim(fieldStaticDir, data.static_dir);
-    dim(fieldRepository, data.panel_github_repository);
-    dim(fieldReleaseURL, data.release_url);
-    if (data.config_file && data.config_file.path) {
-      fieldConfigFile.classList.remove('dim');
-      fieldConfigFile.textContent = data.config_file.path + (data.config_file.readable ? '' : ' (unreadable)');
-    } else {
-      dim(fieldConfigFile, '');
-    }
-    stateUpdated.textContent = 'Checked ' + new Date().toLocaleTimeString();
-  }
-
   async function checkStatus(silent) {
     setBusy(statusButton, true);
-    if (!silent) setLog('working', 'Fetching status…');
+    if (!silent) setLog('working', 'log.fetching', null, false);
     try {
       const data = await api('/v0/resource/plugins/panel-updater/status');
       renderStatus(data);
-      if (!silent) setLog('ok', 'Status loaded successfully.');
+      if (!silent) setLog('ok', 'log.loaded', null, false);
     } catch (error) {
-      setHealth('error', 'Status failed');
-      setLog('error', 'Failed to load status: ' + error.message);
+      setHealth('error', 'health.statusFailed');
+      setLog('error', 'log.statusFailed', { msg: error.message }, false);
     } finally {
       setBusy(statusButton, false);
     }
@@ -542,27 +752,110 @@
 
   async function updatePanel() {
     setBusy(updateButton, true);
-    setLog('working', 'Downloading latest release and verifying digest…');
+    setLog('working', 'log.updating', null, false);
     try {
       const data = await api('/v0/resource/plugins/panel-updater/update');
-      const parts = [data.message || 'Update completed.'];
-      if (data.source) parts.push('source: ' + data.source);
-      if (data.hash) parts.push('sha256: ' + data.hash);
-      if (typeof data.updated === 'boolean') parts.push('updated: ' + data.updated);
-      setLog('ok', parts.join('\n'));
+      const lines = [t('log.updateCompleted')];
+      if (data.message && data.message !== 'updated') lines[0] = data.message;
+      if (data.source) lines.push(t('log.source', { value: data.source }));
+      if (data.hash) lines.push(t('log.hash', { value: data.hash }));
+      if (typeof data.updated === 'boolean') lines.push(t('log.updated', { value: data.updated }));
+      log.dataset.state = 'ok';
+      log.textContent = lines.join('\n');
+      delete log.dataset.i18n;
+      delete log.dataset.i18nHtml;
+      delete log.dataset.params;
+      uiState.log = null;
       await checkStatus(true);
     } catch (error) {
-      setLog('error', 'Update failed: ' + error.message);
-      setHealth('error', 'Update failed');
+      setLog('error', 'log.updateFailed', { msg: error.message }, false);
+      setHealth('error', 'health.updateFailed');
     } finally {
       setBusy(updateButton, false);
     }
   }
 
+  function applyStaticI18n() {
+    document.documentElement.lang = currentLang === 'zh' ? 'zh-CN' : 'en';
+    document.title = t('title');
+    document.querySelectorAll('[data-i18n]').forEach((el) => {
+      // Skip elements owned by dynamic UI state; those re-render from state.
+      if (el === healthLabel || el === fieldFileState || el === stateUpdated || el === log) return;
+      const key = el.dataset.i18n;
+      const params = el.dataset.params ? safeParse(el.dataset.params) : null;
+      el.textContent = t(key, params);
+    });
+    document.querySelectorAll('[data-i18n-html]').forEach((el) => {
+      if (el === log) return;
+      const key = el.dataset.i18nHtml;
+      el.innerHTML = t(key);
+    });
+
+    // Re-render stateful nodes.
+    if (uiState.health) healthLabel.textContent = t(healthLabel.dataset.i18n || 'health.unknown');
+    renderFileStateField();
+    renderConfigFileField();
+    if (uiState.stateUpdated) renderStateUpdated();
+    // Reformat time-sensitive values in the current locale.
+    if (uiState.lastStatus && uiState.lastStatus.exists) {
+      dim(fieldSize, formatBytes(uiState.lastStatus.size));
+      dim(fieldModified, formatWhen(uiState.lastStatus.modified_at));
+    }
+    if (uiState.lastCheckedAt) {
+      uiState.stateUpdated = { key: 'state.checkedAt', params: { time: formatTime(uiState.lastCheckedAt) } };
+      renderStateUpdated();
+    }
+    if (uiState.log) {
+      if (uiState.log.html) {
+        log.innerHTML = t(uiState.log.key, uiState.log.params);
+      } else {
+        log.textContent = t(uiState.log.key, uiState.log.params);
+      }
+    }
+
+    // Re-translate any busy button label.
+    document.querySelectorAll('.btn').forEach((btn) => {
+      const label = btn.querySelector('.btn-label');
+      if (!label) return;
+      if (btn.disabled && label.dataset.originalI18n !== undefined) {
+        label.textContent = t('actions.working');
+      } else if (label.dataset.i18n) {
+        label.textContent = t(label.dataset.i18n);
+      }
+    });
+
+    document.querySelectorAll('.lang-switch button').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.lang === currentLang);
+      btn.setAttribute('aria-pressed', btn.dataset.lang === currentLang ? 'true' : 'false');
+    });
+  }
+
+  function safeParse(raw) {
+    try { return JSON.parse(raw); } catch (_) { return null; }
+  }
+
+  function setLang(lang, persist) {
+    if (!messages[lang] || lang === currentLang) {
+      applyStaticI18n();
+      return;
+    }
+    currentLang = lang;
+    if (persist) {
+      try { localStorage.setItem(LANG_KEY, lang); } catch (_) { /* ignore */ }
+    }
+    applyStaticI18n();
+  }
+
+  document.querySelectorAll('.lang-switch button').forEach((btn) => {
+    btn.addEventListener('click', () => setLang(btn.dataset.lang, true));
+  });
+
+  applyStaticI18n();
+
   statusButton.addEventListener('click', () => checkStatus(false));
   updateButton.addEventListener('click', updatePanel);
 
-  // Load status automatically once so the panel isn't blank on open.
+  // Auto-load status once so the panel isn't blank on open.
   checkStatus(true);
 })();
 </script>

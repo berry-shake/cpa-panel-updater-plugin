@@ -359,6 +359,35 @@ func TestPanelResourceIsUnauthenticated(t *testing.T) {
 	}
 }
 
+func TestPanelResourceEmbedsEnglishAndChineseDictionaries(t *testing.T) {
+	t.Parallel()
+
+	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
+	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
+		pluginabi.MethodManagementHandle,
+		managementRequest(t, http.MethodGet, panelPath, "", nil),
+	))
+	body := string(response.Body)
+	for _, expected := range []string{
+		// English dictionary sentinels.
+		"'hero.title': 'Panel Updater'",
+		"'actions.update': 'Update now'",
+		// Chinese dictionary sentinels.
+		"'hero.title': '面板更新器'",
+		"'actions.update': '立即更新'",
+		// Language switcher buttons.
+		`data-lang="en"`,
+		`data-lang="zh"`,
+		// Persistence and default-detection hooks.
+		"cliproxy-panel-updater-lang",
+		"navigator.languages",
+	} {
+		if !strings.Contains(body, expected) {
+			t.Errorf("page does not contain %q", expected)
+		}
+	}
+}
+
 func TestUnknownRPCMethodReturnsErrorEnvelope(t *testing.T) {
 	t.Parallel()
 

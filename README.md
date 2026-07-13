@@ -37,8 +37,8 @@ plugins:
         name: Panel Updater
         description: Manually update the management center panel (management.html).
         author: berry-shake
-        version: 0.1.3
-        release-tag: v0.1.3
+        version: 0.1.4
+        release-tag: v0.1.4
         repository: https://github.com/berry-shake/cliproxy-panel-updater
         install:
           type: github-release
@@ -108,6 +108,12 @@ Click **Check status** to inspect the current `management.html`, then click
 **Update now** to pull the latest release and atomically replace the file.
 No key entry is needed.
 
+The page is localized in English and Simplified Chinese. It picks the
+default language from `navigator.language` (any `zh-*` tag selects Chinese;
+everything else falls back to English), and the choice can be overridden
+with the EN/中文 toggle in the header. The selection is remembered in
+`localStorage` under `cliproxy-panel-updater-lang`.
+
 Public resource endpoints (GET only):
 
 ```text
@@ -147,8 +153,8 @@ returns HTTP 409.
 ```bash
 go test ./...
 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.3-dev' \
-  -o panel-updater-v0.1.3-dev.dylib .
+  -ldflags '-X main.pluginVersion=0.1.4-dev' \
+  -o panel-updater-v0.1.4-dev.dylib .
 ```
 
 Use `.so` on Linux and `.dll` on Windows. The c-shared build also produces a
