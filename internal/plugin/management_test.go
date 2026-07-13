@@ -55,15 +55,6 @@ func managementRequest(t *testing.T, method, path, callbackID string) []byte {
 	return raw
 }
 
-func lifecycleRequest(t *testing.T, configYAML string) []byte {
-	t.Helper()
-	raw, errMarshal := json.Marshal(rpcLifecycleRequest{ConfigYAML: []byte(configYAML)})
-	if errMarshal != nil {
-		t.Fatal(errMarshal)
-	}
-	return raw
-}
-
 func TestRegisterAdvertisesOnlyManagementAPI(t *testing.T) {
 	t.Parallel()
 
@@ -75,94 +66,37 @@ func TestRegisterAdvertisesOnlyManagementAPI(t *testing.T) {
 	if registration.Metadata.Version != "1.2.3" || registration.Metadata.Name != "Panel Updater" {
 		t.Fatalf("Metadata = %+v", registration.Metadata)
 	}
-	if len(registration.Metadata.ConfigFields) != 1 ||
-		registration.Metadata.ConfigFields[0].Name != configManagementKey ||
-		registration.Metadata.ConfigFields[0].Type != pluginapi.ConfigFieldTypeString {
-		t.Fatalf("ConfigFields = %+v, want one %s string field", registration.Metadata.ConfigFields, configManagementKey)
+	if len(registration.Metadata.ConfigFields) != 0 {
+		t.Fatalf("ConfigFields = %+v, want empty", registration.Metadata.ConfigFields)
 	}
 	if !registration.Capabilities.ManagementAPI {
 		t.Fatal("management_api capability is false")
 	}
 }
 
-func TestRegisterAppliesAndReconfigureClearsManagementKey(t *testing.T) {
-	t.Parallel()
-
-	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
-	decodeEnvelopeResult[rpcRegistration](t, service.Call(
-		pluginabi.MethodPluginRegister,
-		lifecycleRequest(t, "enabled: true\nmanagement_key: \" secret-123 \"\n"),
-	))
-	if got := service.configuredManagementKey(); got != "secret-123" {
-		t.Fatalf("configuredManagementKey() = %q, want trimmed secret-123", got)
-	}
-
-	decodeEnvelopeResult[rpcRegistration](t, service.Call(
-		pluginabi.MethodPluginReconfigure,
-		lifecycleRequest(t, "enabled: true\n"),
-	))
-	if got := service.configuredManagementKey(); got != "" {
-		t.Fatalf("configuredManagementKey() = %q, want empty after reconfigure without key", got)
-	}
-}
-
-func TestPanelPageEmbedsConfiguredManagementKey(t *testing.T) {
-	t.Parallel()
-
-	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
-	decodeEnvelopeResult[rpcRegistration](t, service.Call(
-		pluginabi.MethodPluginRegister,
-		lifecycleRequest(t, "management_key: \"pass</script>word\"\n"),
-	))
-	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, panelPath, ""),
-	))
-	body := string(response.Body)
-	if strings.Contains(body, "__CONFIGURED_MANAGEMENT_KEY__") {
-		t.Fatal("placeholder was not replaced")
-	}
-	if strings.Contains(body, "</script>word") {
-		t.Fatal("configured key is not script-safe encoded")
-	}
-	if !strings.Contains(body, `const configuredKey = "pass\u003c/script\u003eword";`) {
-		t.Fatal("page does not embed the JSON-encoded key")
-	}
-}
-
-func TestPanelPageEmbedsEmptyKeyWhenUnconfigured(t *testing.T) {
-	t.Parallel()
-
-	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
-	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, panelPath, ""),
-	))
-	body := string(response.Body)
-	if strings.Contains(body, "__CONFIGURED_MANAGEMENT_KEY__") {
-		t.Fatal("placeholder was not replaced")
-	}
-	if !strings.Contains(body, `const configuredKey = "";`) {
-		t.Fatal("page does not default the configured key to an empty string")
-	}
-}
-
-func TestManagementRegisterDeclaresExpectedRoutes(t *testing.T) {
+func TestManagementRegisterDeclaresExpectedResources(t *testing.T) {
 	t.Parallel()
 
 	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
 	registration := decodeEnvelopeResult[managementRegistration](t, service.Call(pluginabi.MethodManagementRegister, []byte(`{}`)))
-	if len(registration.Routes) != 2 {
-		t.Fatalf("routes = %+v", registration.Routes)
-	}
-	if registration.Routes[0].Method != http.MethodGet || registration.Routes[0].Path != "/plugins/panel-updater/status" {
-		t.Fatalf("status route = %+v", registration.Routes[0])
-	}
-	if registration.Routes[1].Method != http.MethodPost || registration.Routes[1].Path != "/plugins/panel-updater/update" {
-		t.Fatalf("update route = %+v", registration.Routes[1])
-	}
-	if len(registration.Resources) != 1 || registration.Resources[0].Path != "/panel" {
+	if len(registration.Resources) != 3 {
 		t.Fatalf("resources = %+v", registration.Resources)
+	}
+	paths := map[string]string{}
+	for _, res := range registration.Resources {
+		paths[res.Path] = res.Menu
+	}
+	if _, ok := paths["/panel"]; !ok {
+		t.Fatalf("resources missing /panel: %+v", registration.Resources)
+	}
+	if _, ok := paths["/status"]; !ok {
+		t.Fatalf("resources missing /status: %+v", registration.Resources)
+	}
+	if _, ok := paths["/update"]; !ok {
+		t.Fatalf("resources missing /update: %+v", registration.Resources)
+	}
+	if paths["/panel"] != "Panel Updater" {
+		t.Fatalf("/panel menu = %q", paths["/panel"])
 	}
 }
 
@@ -224,7 +158,7 @@ func TestUpdateForwardsRepositoryDirectoryAndCallbackID(t *testing.T) {
 
 	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodPost, updatePath, "callback-update"),
+		managementRequest(t, http.MethodGet, updatePath, "callback-update"),
 	))
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("StatusCode = %d, body = %s", response.StatusCode, response.Body)
@@ -250,7 +184,7 @@ func TestUpdateMapsBusyAndOtherErrors(t *testing.T) {
 			service := New("dev", &fakeRunner{err: tt.err}, func() HostConfig { return HostConfig{StaticDir: "/tmp/static"} })
 			response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 				pluginabi.MethodManagementHandle,
-				managementRequest(t, http.MethodPost, updatePath, "callback"),
+				managementRequest(t, http.MethodGet, updatePath, "callback"),
 			))
 			if response.StatusCode != tt.want {
 				t.Fatalf("StatusCode = %d, want %d", response.StatusCode, tt.want)
@@ -259,7 +193,20 @@ func TestUpdateMapsBusyAndOtherErrors(t *testing.T) {
 	}
 }
 
-func TestPanelResourceContainsAuthenticatedManagementCalls(t *testing.T) {
+func TestNonGetMethodsRejected(t *testing.T) {
+	t.Parallel()
+
+	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
+	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
+		pluginabi.MethodManagementHandle,
+		managementRequest(t, http.MethodPost, updatePath, ""),
+	))
+	if response.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("StatusCode = %d, want %d", response.StatusCode, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestPanelResourceIsUnauthenticated(t *testing.T) {
 	t.Parallel()
 
 	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
@@ -269,13 +216,21 @@ func TestPanelResourceContainsAuthenticatedManagementCalls(t *testing.T) {
 	))
 	body := string(response.Body)
 	for _, expected := range []string{
-		"/v0/management/plugins/panel-updater/status",
-		"/v0/management/plugins/panel-updater/update",
-		"Authorization",
-		"localStorage",
+		"/v0/resource/plugins/panel-updater/status",
+		"/v0/resource/plugins/panel-updater/update",
 	} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("page does not contain %q", expected)
+		}
+	}
+	for _, unwanted := range []string{
+		"Authorization",
+		"management-key",
+		"localStorage.getItem(keyName)",
+		"Bearer",
+	} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("page unexpectedly contains %q", unwanted)
 		}
 	}
 }

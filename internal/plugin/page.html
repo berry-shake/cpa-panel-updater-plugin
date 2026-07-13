@@ -144,8 +144,6 @@
     <p>Reads <code>remote-management.panel-github-repository</code> from the active host config and atomically updates <code>management.html</code>.</p>
   </section>
   <section class="card">
-    <label for="management-key">Management key</label>
-    <input id="management-key" type="password" autocomplete="current-password" placeholder="Enter the remote management secret key">
     <div class="actions">
       <button id="status-button" class="btn btn-secondary" type="button">Check status</button>
       <button id="update-button" class="btn btn-primary" type="button">Update now</button>
@@ -192,32 +190,17 @@
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyPanelTheme);
   }
 
-  // Replaced by the plugin with the plugins.configs.panel-updater.management_key
-  // value (a JSON string literal). Empty when the key is not configured.
-  const configuredKey = "__CONFIGURED_MANAGEMENT_KEY__";
-  const keyName = 'cliproxy-panel-updater-management-key';
-  const keyInput = document.getElementById('management-key');
   const statusButton = document.getElementById('status-button');
   const updateButton = document.getElementById('update-button');
   const result = document.getElementById('result');
-  keyInput.value = configuredKey || localStorage.getItem(keyName) || '';
 
   function setResult(message, isError) {
     result.textContent = message;
     result.className = isError ? 'error' : 'ok';
   }
 
-  async function api(path, method) {
-    const key = keyInput.value.trim();
-    if (!key) throw new Error('Management key is required.');
-    // Do not copy the server-configured key into localStorage; only
-    // remember keys the user typed manually.
-    if (!configuredKey) localStorage.setItem(keyName, key);
-    const response = await fetch(path, {
-      method,
-      headers: { Authorization: `Bearer ${key}` },
-      cache: 'no-store'
-    });
+  async function api(path) {
+    const response = await fetch(path, { method: 'GET', cache: 'no-store' });
     const text = await response.text();
     let data;
     try { data = JSON.parse(text); } catch (_) { data = { message: text || `HTTP ${response.status}` }; }
@@ -239,7 +222,7 @@
   async function checkStatus() {
     statusButton.disabled = true;
     try {
-      const data = await api('/v0/management/plugins/panel-updater/status', 'GET');
+      const data = await api('/v0/resource/plugins/panel-updater/status');
       renderStatus(data);
       setResult('Status loaded.', false);
     } catch (error) {
@@ -252,7 +235,7 @@
   async function updatePanel() {
     updateButton.disabled = true;
     try {
-      const data = await api('/v0/management/plugins/panel-updater/update', 'POST');
+      const data = await api('/v0/resource/plugins/panel-updater/update');
       setResult(`${data.message}\nsource=${data.source}\nhash=${data.hash}`, false);
       await checkStatus();
     } catch (error) {

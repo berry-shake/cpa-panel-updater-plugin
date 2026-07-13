@@ -37,13 +37,16 @@ type errorBody struct {
 }
 
 func (s *Service) handleManagement(req managementRPCRequest) pluginapi.ManagementResponse {
-	switch {
-	case req.Method == http.MethodGet && req.Path == statusPath:
+	if req.Method != http.MethodGet {
+		return jsonResponse(http.StatusMethodNotAllowed, errorBody{Error: "method_not_allowed", Message: "only GET is accepted on resource routes"})
+	}
+	switch req.Path {
+	case statusPath:
 		return s.status()
-	case req.Method == http.MethodPost && req.Path == updatePath:
+	case updatePath:
 		return s.update(req.HostCallbackID)
-	case req.Method == http.MethodGet && req.Path == panelPath:
-		return panelResponse(s.configuredManagementKey())
+	case panelPath:
+		return panelResponse()
 	default:
 		return jsonResponse(http.StatusNotFound, errorBody{Error: "not_found", Message: "plugin route not found"})
 	}

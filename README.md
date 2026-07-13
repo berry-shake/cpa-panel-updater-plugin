@@ -1,7 +1,7 @@
 # CLIProxyAPI Panel Updater Plugin
 
-A CLIProxyAPI ManagementAPI plugin for manually updating the built-in
-`management.html` control panel.
+A CLIProxyAPI plugin for manually updating the built-in `management.html`
+control panel from a browser page — no management key required.
 
 The plugin reads `remote-management.panel-github-repository` directly from
 the same host configuration file selected by `--config`. Downloads use the
@@ -37,8 +37,8 @@ plugins:
         name: Panel Updater
         description: Manually update the management center panel (management.html).
         author: berry-shake
-        version: 0.1.1
-        release-tag: v0.1.1
+        version: 0.1.2
+        release-tag: v0.1.2
         repository: https://github.com/berry-shake/cliproxy-panel-updater
         install:
           type: github-release
@@ -68,22 +68,7 @@ plugins:
          enabled: true
    ```
 
-No plugin-specific repository setting is required or supported.
-
-## Configuration
-
-| Key | Type | Description |
-| --- | --- | --- |
-| `management_key` | string | Optional. Plaintext management key prefilled into the panel page so it does not have to be typed each time. See the security notes before enabling it. |
-
-```yaml
-plugins:
-  enabled: true
-  configs:
-    panel-updater:
-      enabled: true
-      management_key: "<remote management secret key>"
-```
+No plugin-specific configuration is required or supported.
 
 ## Use
 
@@ -99,30 +84,23 @@ Open:
 http://127.0.0.1:<port>/v0/resource/plugins/panel-updater/panel
 ```
 
-Enter the remote management secret key, then select **Check status** or
-**Update now**. The key is sent only in the `Authorization` header and stored
-in the browser's localStorage for that origin; it is not written by the
-plugin.
+Click **Check status** to inspect the current `management.html`, then click
+**Update now** to pull the latest release and atomically replace the file.
+No key entry is needed.
 
-When `management_key` is configured, the key field is prefilled and nothing
-needs to be typed or maintained in the page. Manually-typed keys are then no
-longer saved to localStorage.
-
-Authenticated API endpoints:
+Public resource endpoints (GET only):
 
 ```text
-GET  /v0/management/plugins/panel-updater/status
-POST /v0/management/plugins/panel-updater/update
+GET /v0/resource/plugins/panel-updater/panel
+GET /v0/resource/plugins/panel-updater/status
+GET /v0/resource/plugins/panel-updater/update
 ```
 
 Example:
 
 ```bash
-curl -H 'Authorization: Bearer <management-key>' \
-  http://127.0.0.1:8317/v0/management/plugins/panel-updater/status
-
-curl -X POST -H 'Authorization: Bearer <management-key>' \
-  http://127.0.0.1:8317/v0/management/plugins/panel-updater/update
+curl http://127.0.0.1:8317/v0/resource/plugins/panel-updater/status
+curl http://127.0.0.1:8317/v0/resource/plugins/panel-updater/update
 ```
 
 ## Update behavior
@@ -149,8 +127,8 @@ returns HTTP 409.
 ```bash
 go test ./...
 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.0-dev' \
-  -o panel-updater-v0.1.0-dev.dylib .
+  -ldflags '-X main.pluginVersion=0.1.2-dev' \
+  -o panel-updater-v0.1.2-dev.dylib .
 ```
 
 Use `.so` on Linux and `.dll` on Windows. The c-shared build also produces a
@@ -158,14 +136,16 @@ C header; the host does not need it.
 
 ## Security notes
 
-- The browser page is public, like all CLIProxyAPI plugin resources, but it
-  cannot read status or run updates without the management key.
-- Setting `management_key` embeds the plaintext key into the page HTML so it
-  can be prefilled. Anyone who can open the panel URL (including proxies
-  that expose it publicly) will be able to read that key from the page
-  source. Only enable it in environments where the panel URL itself is
-  trusted, or leave it empty to keep entering the key manually per browser.
-- The plugin never logs the management key.
-- GitHub release digests are verified before replacement.
-- The fallback page has no digest metadata; update responses clearly report
-  `source: "fallback"` when it is used.
+- The panel page and its status/update endpoints are exposed as unauthenticated
+  `resource` routes. Anyone able to reach the CLIProxyAPI HTTP port can trigger
+  an update.
+- Update content is still constrained: the plugin only replaces
+  `management.html` with the digest-verified asset from the repository
+  configured in `remote-management.panel-github-repository`.
+- The plugin never accepts arbitrary URLs, file paths, or content from the
+  request — the caller only chooses "run an update" or "read status".
+- GitHub release digests are verified before replacement. The fallback page
+  has no digest metadata; update responses clearly report `source: "fallback"`
+  when it is used.
+- Do not expose the CLIProxyAPI HTTP port to untrusted networks without
+  additional protection (reverse proxy auth, IP allow-list, VPN, etc.).
