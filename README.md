@@ -16,30 +16,51 @@ behavior apply automatically.
 
 ## Install
 
-1. Download the release asset matching the host platform.
-2. Remove the platform suffix from the filename. For example:
+### Automatic (plugin store)
+
+Release assets follow the CLIProxyAPI plugin store layout
+(`panel-updater_<version>_<goos>_<goarch>.zip` plus `checksums.txt`), so the
+host can install the plugin from GitHub releases when a `store` block is
+configured:
+
+```yaml
+remote-management:
+  panel-github-repository: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
+
+plugins:
+  enabled: true
+  configs:
+    panel-updater:
+      enabled: true
+      store:
+        id: panel-updater
+        name: Panel Updater
+        description: Manually update the management center panel (management.html).
+        author: berry-shake
+        version: 0.1
+        release-tag: v0.1
+        repository: https://github.com/berry-shake/cliproxy-panel-updater
+        install:
+          type: github-release
+```
+
+### Manual
+
+1. Download the zip matching the host platform and extract
+   `panel-updater.<so|dylib|dll>`.
+2. Put it in the preferred platform directory:
 
    ```text
-   panel-updater-v0.1.0-linux-amd64.so
-   → panel-updater-v0.1.0.so
+   plugins/linux/amd64/panel-updater.so
+   plugins/linux/arm64/panel-updater.so
+   plugins/darwin/amd64/panel-updater.dylib
+   plugins/darwin/arm64/panel-updater.dylib
+   plugins/windows/amd64/panel-updater.dll
    ```
 
-3. Put it in the preferred platform directory:
-
-   ```text
-   plugins/linux/amd64/panel-updater-v0.1.0.so
-   plugins/linux/arm64/panel-updater-v0.1.0.so
-   plugins/darwin/amd64/panel-updater-v0.1.0.dylib
-   plugins/darwin/arm64/panel-updater-v0.1.0.dylib
-   plugins/windows/amd64/panel-updater-v0.1.0.dll
-   ```
-
-4. Enable the plugin in the CLIProxyAPI host configuration:
+3. Enable the plugin in the CLIProxyAPI host configuration:
 
    ```yaml
-   remote-management:
-     panel-github-repository: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
-
    plugins:
      enabled: true
      configs:

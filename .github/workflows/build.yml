@@ -23,6 +23,8 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - name: Vet
         run: go vet ./...
+      - name: Vet release scripts
+        run: go vet ./.github/scripts
       - name: Test
         run: go test ./...
 
@@ -82,18 +84,22 @@ jobs:
           else
             VERSION="0.0.0-dev"
           fi
-          # Build with a plain file name first: Go 1.26 embeds the output
-          # name into a linker .def file, and GNU ld rejects names with
-          # extra dots (e.g. "v0.1") on Windows. Rename afterwards.
-          BUILD_OUTPUT="panel-updater.${EXTENSION}"
-          OUTPUT="panel-updater-v${VERSION}-${TARGET_GOOS}-${TARGET_GOARCH}.${EXTENSION}"
+          # Build with a plain file name: Go 1.26 embeds the output name
+          # into a linker .def file, and GNU ld rejects names with extra
+          # dots (e.g. "v0.1") on Windows. The plugin store installer also
+          # requires the library inside the zip to be named after the
+          # plugin ID.
+          LIBRARY="panel-updater.${EXTENSION}"
+          ARCHIVE="panel-updater_${VERSION}_${TARGET_GOOS}_${TARGET_GOARCH}.zip"
           CGO_ENABLED=1 GOOS="${TARGET_GOOS}" GOARCH="${TARGET_GOARCH}" \
             go build -buildmode=c-shared -trimpath \
             -ldflags "-s -w -X main.pluginVersion=${VERSION}" \
-            -o "${BUILD_OUTPUT}" .
-          rm -f "${BUILD_OUTPUT%.*}.h"
-          mkdir -p dist
-          mv "${BUILD_OUTPUT}" "dist/${OUTPUT}"
+            -o "${LIBRARY}" .
+          rm -f "${LIBRARY%.*}.h"
+          go run ./.github/scripts/package-release.go \
+            -library "${LIBRARY}" \
+            -archive "dist/${ARCHIVE}" \
+            -checksum "dist/${ARCHIVE}.sha256"
       - uses: actions/upload-artifact@v4
         with:
           name: panel-updater-${{ matrix.goos }}-${{ matrix.goarch }}
@@ -116,4 +122,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/* --generate-notes --verify-tag
+        run: |
+          sort dist/*.sha256 > dist/checksums.txt
+          gh release create "${GITHUB_REF_NAME}" dist/*.zip dist/checksums.txt --generate-notes --verify-tag
