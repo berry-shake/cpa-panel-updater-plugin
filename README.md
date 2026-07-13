@@ -37,8 +37,8 @@ plugins:
         name: Panel Updater
         description: Manually update the management center panel (management.html).
         author: berry-shake
-        version: 0.1
-        release-tag: v0.1
+        version: 0.1.1
+        release-tag: v0.1.1
         repository: https://github.com/berry-shake/cliproxy-panel-updater
         install:
           type: github-release
