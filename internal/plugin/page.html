@@ -460,6 +460,9 @@
       'log.updating': 'Downloading latest release and verifying digest…',
       'log.updateCompleted': 'Update completed.',
       'log.updateFailed': 'Update failed: {msg}',
+      'log.updateGithub': 'Management panel updated from the GitHub release.',
+      'log.updateFallback': 'Management panel updated from the unverified fallback page because GitHub was unreachable.',
+      'log.updateUpToDate': 'Management panel is already up to date.',
       'log.source': 'source: {value}',
       'log.hash': 'sha256: {value}',
       'log.updated': 'updated: {value}',
@@ -504,6 +507,9 @@
       'log.updating': '正在下载最新 release 并校验摘要…',
       'log.updateCompleted': '更新完成。',
       'log.updateFailed': '更新失败：{msg}',
+      'log.updateGithub': '已从 GitHub release 更新面板。',
+      'log.updateFallback': 'GitHub 不可达，已使用未校验的备用页面更新面板。',
+      'log.updateUpToDate': '面板已是最新版本，无需更新。',
       'log.source': '来源：{value}',
       'log.hash': '摘要：{value}',
       'log.updated': '已更新：{value}',
@@ -726,6 +732,14 @@
     stateUpdated.textContent = t(uiState.stateUpdated.key, uiState.stateUpdated.params);
   }
 
+  function updateHeadlineKey(data) {
+    const src = (data && typeof data.source === 'string') ? data.source : '';
+    if (src === 'up-to-date') return 'log.updateUpToDate';
+    if (src === 'fallback') return 'log.updateFallback';
+    if (src === 'github') return 'log.updateGithub';
+    return 'log.updateCompleted';
+  }
+
   async function api(path) {
     const response = await fetch(path, { method: 'GET', cache: 'no-store' });
     const text = await response.text();
@@ -755,8 +769,8 @@
     setLog('working', 'log.updating', null, false);
     try {
       const data = await api('/v0/resource/plugins/panel-updater/update');
-      const lines = [t('log.updateCompleted')];
-      if (data.message && data.message !== 'updated') lines[0] = data.message;
+      const headline = updateHeadlineKey(data);
+      const lines = [t(headline)];
       if (data.source) lines.push(t('log.source', { value: data.source }));
       if (data.hash) lines.push(t('log.hash', { value: data.hash }));
       if (typeof data.updated === 'boolean') lines.push(t('log.updated', { value: data.updated }));
