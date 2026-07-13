@@ -55,6 +55,15 @@ func managementRequest(t *testing.T, method, path, callbackID string) []byte {
 	return raw
 }
 
+func lifecycleRequest(t *testing.T, configYAML string) []byte {
+	t.Helper()
+	raw, errMarshal := json.Marshal(rpcLifecycleRequest{ConfigYAML: []byte(configYAML)})
+	if errMarshal != nil {
+		t.Fatal(errMarshal)
+	}
+	return raw
+}
+
 func TestRegisterAdvertisesOnlyManagementAPI(t *testing.T) {
 	t.Parallel()
 
@@ -66,8 +75,75 @@ func TestRegisterAdvertisesOnlyManagementAPI(t *testing.T) {
 	if registration.Metadata.Version != "1.2.3" || registration.Metadata.Name != "Panel Updater" {
 		t.Fatalf("Metadata = %+v", registration.Metadata)
 	}
+	if len(registration.Metadata.ConfigFields) != 1 ||
+		registration.Metadata.ConfigFields[0].Name != configManagementKey ||
+		registration.Metadata.ConfigFields[0].Type != pluginapi.ConfigFieldTypeString {
+		t.Fatalf("ConfigFields = %+v, want one %s string field", registration.Metadata.ConfigFields, configManagementKey)
+	}
 	if !registration.Capabilities.ManagementAPI {
 		t.Fatal("management_api capability is false")
+	}
+}
+
+func TestRegisterAppliesAndReconfigureClearsManagementKey(t *testing.T) {
+	t.Parallel()
+
+	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
+	decodeEnvelopeResult[rpcRegistration](t, service.Call(
+		pluginabi.MethodPluginRegister,
+		lifecycleRequest(t, "enabled: true\nmanagement_key: \" secret-123 \"\n"),
+	))
+	if got := service.configuredManagementKey(); got != "secret-123" {
+		t.Fatalf("configuredManagementKey() = %q, want trimmed secret-123", got)
+	}
+
+	decodeEnvelopeResult[rpcRegistration](t, service.Call(
+		pluginabi.MethodPluginReconfigure,
+		lifecycleRequest(t, "enabled: true\n"),
+	))
+	if got := service.configuredManagementKey(); got != "" {
+		t.Fatalf("configuredManagementKey() = %q, want empty after reconfigure without key", got)
+	}
+}
+
+func TestPanelPageEmbedsConfiguredManagementKey(t *testing.T) {
+	t.Parallel()
+
+	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
+	decodeEnvelopeResult[rpcRegistration](t, service.Call(
+		pluginabi.MethodPluginRegister,
+		lifecycleRequest(t, "management_key: \"pass</script>word\"\n"),
+	))
+	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
+		pluginabi.MethodManagementHandle,
+		managementRequest(t, http.MethodGet, panelPath, ""),
+	))
+	body := string(response.Body)
+	if strings.Contains(body, "__CONFIGURED_MANAGEMENT_KEY__") {
+		t.Fatal("placeholder was not replaced")
+	}
+	if strings.Contains(body, "</script>word") {
+		t.Fatal("configured key is not script-safe encoded")
+	}
+	if !strings.Contains(body, `const configuredKey = "pass\u003c/script\u003eword";`) {
+		t.Fatal("page does not embed the JSON-encoded key")
+	}
+}
+
+func TestPanelPageEmbedsEmptyKeyWhenUnconfigured(t *testing.T) {
+	t.Parallel()
+
+	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
+	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
+		pluginabi.MethodManagementHandle,
+		managementRequest(t, http.MethodGet, panelPath, ""),
+	))
+	body := string(response.Body)
+	if strings.Contains(body, "__CONFIGURED_MANAGEMENT_KEY__") {
+		t.Fatal("placeholder was not replaced")
+	}
+	if !strings.Contains(body, `const configuredKey = "";`) {
+		t.Fatal("page does not default the configured key to an empty string")
 	}
 }
 

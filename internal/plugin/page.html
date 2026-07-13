@@ -192,12 +192,15 @@
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyPanelTheme);
   }
 
+  // Replaced by the plugin with the plugins.configs.panel-updater.management_key
+  // value (a JSON string literal). Empty when the key is not configured.
+  const configuredKey = "__CONFIGURED_MANAGEMENT_KEY__";
   const keyName = 'cliproxy-panel-updater-management-key';
   const keyInput = document.getElementById('management-key');
   const statusButton = document.getElementById('status-button');
   const updateButton = document.getElementById('update-button');
   const result = document.getElementById('result');
-  keyInput.value = localStorage.getItem(keyName) || '';
+  keyInput.value = configuredKey || localStorage.getItem(keyName) || '';
 
   function setResult(message, isError) {
     result.textContent = message;
@@ -207,7 +210,9 @@
   async function api(path, method) {
     const key = keyInput.value.trim();
     if (!key) throw new Error('Management key is required.');
-    localStorage.setItem(keyName, key);
+    // Do not copy the server-configured key into localStorage; only
+    // remember keys the user typed manually.
+    if (!configuredKey) localStorage.setItem(keyName, key);
     const response = await fetch(path, {
       method,
       headers: { Authorization: `Bearer ${key}` },

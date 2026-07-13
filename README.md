@@ -70,6 +70,21 @@ plugins:
 
 No plugin-specific repository setting is required or supported.
 
+## Configuration
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `management_key` | string | Optional. Plaintext management key prefilled into the panel page so it does not have to be typed each time. See the security notes before enabling it. |
+
+```yaml
+plugins:
+  enabled: true
+  configs:
+    panel-updater:
+      enabled: true
+      management_key: "<remote management secret key>"
+```
+
 ## Use
 
 Start CLIProxyAPI with its normal config argument:
@@ -88,6 +103,10 @@ Enter the remote management secret key, then select **Check status** or
 **Update now**. The key is sent only in the `Authorization` header and stored
 in the browser's localStorage for that origin; it is not written by the
 plugin.
+
+When `management_key` is configured, the key field is prefilled and nothing
+needs to be typed or maintained in the page. Manually-typed keys are then no
+longer saved to localStorage.
 
 Authenticated API endpoints:
 
@@ -141,7 +160,12 @@ C header; the host does not need it.
 
 - The browser page is public, like all CLIProxyAPI plugin resources, but it
   cannot read status or run updates without the management key.
-- The plugin never logs the management key or embeds it in HTML.
+- Setting `management_key` embeds the plaintext key into the page HTML so it
+  can be prefilled. Anyone who can open the panel URL (including proxies
+  that expose it publicly) will be able to read that key from the page
+  source. Only enable it in environments where the panel URL itself is
+  trusted, or leave it empty to keep entering the key manually per browser.
+- The plugin never logs the management key.
 - GitHub release digests are verified before replacement.
 - The fallback page has no digest metadata; update responses clearly report
   `source: "fallback"` when it is used.

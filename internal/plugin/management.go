@@ -43,7 +43,7 @@ func (s *Service) handleManagement(req managementRPCRequest) pluginapi.Managemen
 	case req.Method == http.MethodPost && req.Path == updatePath:
 		return s.update(req.HostCallbackID)
 	case req.Method == http.MethodGet && req.Path == panelPath:
-		return panelResponse()
+		return panelResponse(s.configuredManagementKey())
 	default:
 		return jsonResponse(http.StatusNotFound, errorBody{Error: "not_found", Message: "plugin route not found"})
 	}

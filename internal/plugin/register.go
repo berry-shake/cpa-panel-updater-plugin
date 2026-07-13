@@ -1,20 +1,24 @@
 package plugin
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/berry-shake/cliproxy-panel-updater/internal/updater"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"gopkg.in/yaml.v3"
 )
 
 const (
-	statusPath = "/v0/management/plugins/panel-updater/status"
-	updatePath = "/v0/management/plugins/panel-updater/update"
-	panelPath  = "/v0/resource/plugins/panel-updater/panel"
+	statusPath          = "/v0/management/plugins/panel-updater/status"
+	updatePath          = "/v0/management/plugins/panel-updater/update"
+	panelPath           = "/v0/resource/plugins/panel-updater/panel"
+	configManagementKey = "management_key"
 )
 
 // UpdateRunner abstracts the updater so management handlers can be tested with a fake.
@@ -30,6 +34,17 @@ type Service struct {
 	version  string
 	runner   UpdateRunner
 	resolver ConfigResolver
+
+	mu            sync.RWMutex
+	managementKey string
+}
+
+type pluginConfig struct {
+	ManagementKey string `yaml:"management_key"`
+}
+
+type rpcLifecycleRequest struct {
+	ConfigYAML []byte `json:"config_yaml"`
 }
 
 type rpcCapabilities struct {
@@ -83,6 +98,7 @@ func New(version string, runner UpdateRunner, resolver ConfigResolver) *Service 
 func (s *Service) Call(method string, request []byte) []byte {
 	switch method {
 	case pluginabi.MethodPluginRegister, pluginabi.MethodPluginReconfigure:
+		s.applyConfig(request)
 		return okEnvelope(rpcRegistration{
 			SchemaVersion: pluginabi.SchemaVersion,
 			Metadata: pluginapi.Metadata{
@@ -90,7 +106,11 @@ func (s *Service) Call(method string, request []byte) []byte {
 				Version:          s.version,
 				Author:           "berry-shake",
 				GitHubRepository: "https://github.com/berry-shake/cliproxy-panel-updater",
-				ConfigFields:     []pluginapi.ConfigField{},
+				ConfigFields: []pluginapi.ConfigField{{
+					Name:        configManagementKey,
+					Type:        pluginapi.ConfigFieldTypeString,
+					Description: "Optional plaintext management key prefilled into the panel page. Anyone who can open the public panel page can read it; leave empty to keep entering the key manually.",
+				}},
 			},
 			Capabilities: rpcCapabilities{ManagementAPI: true},
 		})
@@ -115,6 +135,30 @@ func (s *Service) Call(method string, request []byte) []byte {
 	default:
 		return ErrorEnvelope("unknown_method", "unknown method: "+method)
 	}
+}
+
+// applyConfig replaces the plugin configuration from a lifecycle request payload.
+// Invalid or empty payloads clear the configured key instead of keeping stale values.
+func (s *Service) applyConfig(request []byte) {
+	next := pluginConfig{}
+	if len(bytes.TrimSpace(request)) > 0 {
+		var req rpcLifecycleRequest
+		if errUnmarshal := json.Unmarshal(request, &req); errUnmarshal == nil && len(bytes.TrimSpace(req.ConfigYAML)) > 0 {
+			var cfg pluginConfig
+			if errYAML := yaml.Unmarshal(req.ConfigYAML, &cfg); errYAML == nil {
+				next = cfg
+			}
+		}
+	}
+	s.mu.Lock()
+	s.managementKey = strings.TrimSpace(next.ManagementKey)
+	s.mu.Unlock()
+}
+
+func (s *Service) configuredManagementKey() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.managementKey
 }
 
 func okEnvelope(result any) []byte {
