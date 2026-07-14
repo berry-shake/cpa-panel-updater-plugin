@@ -37,8 +37,8 @@ plugins:
         name: Panel Updater
         description: Manually update the management center panel (management.html).
         author: berry-shake
-        version: 0.1.9
-        release-tag: v0.1.9
+        version: 0.2.0
+        release-tag: v0.2.0
         repository: https://github.com/berry-shake/cpa-panel-updater-plugin
         install:
           type: github-release
@@ -155,8 +155,8 @@ returns HTTP 409.
 ```bash
 go test ./...
 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.1.9-dev' \
-  -o panel-updater-v0.1.9-dev.dylib .
+  -ldflags '-X main.pluginVersion=0.2.0-dev' \
+  -o panel-updater-v0.2.0-dev.dylib .
 ```
 
 Use `.so` on Linux and `.dll` on Windows. The c-shared build also produces a
