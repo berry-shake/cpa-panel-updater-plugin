@@ -68,8 +68,8 @@ import (
 	"sync"
 	"unsafe"
 
-	pluginruntime "github.com/berry-shake/cliproxy-panel-updater/internal/plugin"
-	"github.com/berry-shake/cliproxy-panel-updater/internal/updater"
+	pluginruntime "github.com/berry-shake/cliproxy-panel-updater-plugin/internal/plugin"
+	"github.com/berry-shake/cliproxy-panel-updater-plugin/internal/updater"
 	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
 )
 
