@@ -23,7 +23,6 @@ type configFileStatus struct {
 
 type statusResponse struct {
 	ConfigFile            configFileStatus `json:"config_file"`
-	StaticDir             string           `json:"static_dir"`
 	FilePath              string           `json:"file_path"`
 	Exists                bool             `json:"exists"`
 	Size                  int64            `json:"size"`
@@ -125,7 +124,6 @@ func (s *Service) status() pluginapi.ManagementResponse {
 			Readable: config.ConfigReadable,
 			Error:    config.ConfigError,
 		},
-		StaticDir:             config.StaticDir,
 		FilePath:              filePath,
 		PanelGitHubRepository: config.PanelGitHubRepository,
 		ReleaseURL:            updater.ResolveReleaseURL(config.PanelGitHubRepository),
