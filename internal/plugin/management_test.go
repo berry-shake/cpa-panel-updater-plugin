@@ -278,57 +278,57 @@ func TestOriginEnforcementRejectsUnlistedOrigins(t *testing.T) {
 		lifecycleRequest(t, "allowed_origins: \"https://admin.example\"\n"),
 	))
 
-	// Missing Origin/Referer is treated as same-origin and allowed.
-	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, updatePath, "cb", nil),
-	))
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("empty origin should be allowed, got %d", response.StatusCode)
+	tests := []struct {
+		name    string
+		headers http.Header
+		want    int
+	}{
+		{name: "missing origin and referer allowed", headers: nil, want: http.StatusOK},
+		{name: "listed origin passes", headers: http.Header{"Origin": []string{"https://admin.example"}}, want: http.StatusOK},
+		{name: "listed origin passes with cross-site fetch metadata", headers: http.Header{"Origin": []string{"https://admin.example"}, "Sec-Fetch-Site": []string{"cross-site"}}, want: http.StatusOK},
+		{name: "unlisted origin rejected", headers: http.Header{"Origin": []string{"https://evil.example"}}, want: http.StatusForbidden},
+		{name: "listed referer passes", headers: http.Header{"Referer": []string{"https://admin.example/some/page"}}, want: http.StatusOK},
+		{name: "unlisted referer rejected", headers: http.Header{"Referer": []string{"https://evil.example/page"}}, want: http.StatusForbidden},
 	}
-
-	// Listed Origin passes.
-	allowed := http.Header{"Origin": []string{"https://admin.example"}}
-	response = decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, updatePath, "cb", allowed),
-	))
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("listed origin should pass, got %d", response.StatusCode)
-	}
-
-	// Unlisted Origin is rejected.
-	blocked := http.Header{"Origin": []string{"https://evil.example"}}
-	response = decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, updatePath, "cb", blocked),
-	))
-	if response.StatusCode != http.StatusForbidden {
-		t.Fatalf("unlisted origin should be forbidden, got %d body=%s", response.StatusCode, response.Body)
-	}
-
-	// Referer with allowed origin passes when Origin absent.
-	viaReferer := http.Header{"Referer": []string{"https://admin.example/some/page"}}
-	response = decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, updatePath, "cb", viaReferer),
-	))
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("allowed referer should pass, got %d", response.StatusCode)
+	for _, tt := range tests {
+		response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
+			pluginabi.MethodManagementHandle,
+			managementRequest(t, http.MethodGet, updatePath, "cb", tt.headers),
+		))
+		if response.StatusCode != tt.want {
+			t.Fatalf("%s: StatusCode = %d, want %d, body=%s", tt.name, response.StatusCode, tt.want, response.Body)
+		}
 	}
 }
 
-func TestOriginEnforcementDisabledWhenNoOriginsConfigured(t *testing.T) {
+func TestOriginEnforcementDefaultRejectsCrossOrigin(t *testing.T) {
 	t.Parallel()
 
 	service := New("dev", &fakeRunner{result: updater.Result{Message: "ok"}}, func() HostConfig { return HostConfig{StaticDir: "/tmp"} })
-	// No config applied → no origin restriction.
-	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, updatePath, "cb", http.Header{"Origin": []string{"https://anywhere.example"}}),
-	))
-	if response.StatusCode != http.StatusOK {
-		t.Fatalf("cross-origin should pass when unconfigured, got %d body=%s", response.StatusCode, response.Body)
+	// No allowed_origins configured → cross-origin browser requests rejected,
+	// same-origin and non-browser requests permitted.
+	tests := []struct {
+		name    string
+		headers http.Header
+		want    int
+	}{
+		{name: "cli without browser headers allowed", headers: nil, want: http.StatusOK},
+		{name: "user navigation allowed", headers: http.Header{"Sec-Fetch-Site": []string{"none"}}, want: http.StatusOK},
+		{name: "same-origin fetch allowed", headers: http.Header{"Sec-Fetch-Site": []string{"same-origin"}}, want: http.StatusOK},
+		{name: "cross-site fetch rejected", headers: http.Header{"Sec-Fetch-Site": []string{"cross-site"}}, want: http.StatusForbidden},
+		{name: "same-site fetch rejected", headers: http.Header{"Sec-Fetch-Site": []string{"same-site"}}, want: http.StatusForbidden},
+		{name: "origin header rejected", headers: http.Header{"Origin": []string{"https://anywhere.example"}}, want: http.StatusForbidden},
+		{name: "null origin rejected", headers: http.Header{"Origin": []string{"null"}}, want: http.StatusForbidden},
+		{name: "legacy referer-only allowed", headers: http.Header{"Referer": []string{"https://anywhere.example/page"}}, want: http.StatusOK},
+	}
+	for _, tt := range tests {
+		response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
+			pluginabi.MethodManagementHandle,
+			managementRequest(t, http.MethodGet, updatePath, "cb", tt.headers),
+		))
+		if response.StatusCode != tt.want {
+			t.Fatalf("%s: StatusCode = %d, want %d, body=%s", tt.name, response.StatusCode, tt.want, response.Body)
+		}
 	}
 }
 

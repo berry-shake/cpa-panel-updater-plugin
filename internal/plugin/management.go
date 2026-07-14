@@ -61,27 +61,41 @@ func (s *Service) handleManagement(req managementRPCRequest) pluginapi.Managemen
 	}
 }
 
-// enforceOrigin rejects cross-origin requests when allowed_origins is
-// configured. Requests without an Origin or Referer header are treated as
-// same-origin (browser omits Origin for top-level GETs and CLI tools do not
-// send it at all). An empty allowed_origins list disables the check.
+// enforceOrigin rejects cross-origin browser requests on the status/update
+// endpoints. Cross-origin is always rejected unless the declared origin
+// (Origin header, falling back to Referer) matches allowed_origins, so the
+// empty default is the strictest setting. Same-origin browser requests and
+// requests without any browser context headers (CLI tools) are permitted.
+//
+// Detection is layered: Sec-Fetch-Site is authoritative when present (the
+// browser forbids pages from forging Sec- headers). Without it, a bare
+// Origin header implies a cross-origin fetch because browsers omit Origin
+// on same-origin GET requests. A Referer alone is ambiguous on legacy
+// browsers, so it only causes rejection once allowed_origins is configured.
 func (s *Service) enforceOrigin(req managementRPCRequest, allowed []string) (pluginapi.ManagementResponse, bool) {
-	if len(allowed) == 0 {
+	headers := req.Headers
+	site := strings.ToLower(strings.TrimSpace(headers.Get("Sec-Fetch-Site")))
+	if site == "same-origin" || site == "none" {
 		return pluginapi.ManagementResponse{}, true
 	}
-	origin := requestOrigin(req.Headers)
-	if origin == "" {
-		return pluginapi.ManagementResponse{}, true
-	}
-	for _, candidate := range allowed {
-		if strings.EqualFold(candidate, origin) {
-			return pluginapi.ManagementResponse{}, true
+	origin := requestOrigin(headers)
+	if origin != "" {
+		for _, candidate := range allowed {
+			if strings.EqualFold(candidate, origin) {
+				return pluginapi.ManagementResponse{}, true
+			}
 		}
 	}
-	return jsonResponse(http.StatusForbidden, errorBody{
-		Error:   "origin_not_allowed",
-		Message: "request origin is not in allowed_origins",
-	}), false
+	crossOrigin := site == "same-site" || site == "cross-site" ||
+		strings.TrimSpace(headers.Get("Origin")) != "" ||
+		(origin != "" && len(allowed) > 0)
+	if crossOrigin {
+		return jsonResponse(http.StatusForbidden, errorBody{
+			Error:   "origin_not_allowed",
+			Message: "cross-origin requests are rejected; add trusted origins to allowed_origins",
+		}), false
+	}
+	return pluginapi.ManagementResponse{}, true
 }
 
 func requestOrigin(headers http.Header) string {

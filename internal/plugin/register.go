@@ -102,7 +102,7 @@ func (s *Service) Call(method string, request []byte) []byte {
 					{
 						Name:        configAllowedOrigins,
 						Type:        pluginapi.ConfigFieldTypeString,
-						Description: "Optional. Comma-separated origins allowed to embed the panel and call the resource endpoints. Empty disables the CSP frame-ancestors relaxation and Origin/Referer enforcement.",
+						Description: "Comma-separated origins trusted to embed the panel and call the resource endpoints cross-origin. Empty is the strictest default: iframe embedding stays blocked (frame-ancestors 'none') and cross-origin browser requests are rejected.",
 					},
 				},
 			},

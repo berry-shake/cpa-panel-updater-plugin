@@ -72,7 +72,7 @@ plugins:
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `allowed_origins` | string | Optional. Comma-separated origin list (e.g. `https://admin.example, https://ops.example`). Sets the CSP `frame-ancestors` list so those origins may embed the panel in an iframe, and restricts the `/status` and `/update` resource endpoints to requests whose `Origin` (fallback `Referer`) matches one of the entries. Empty disables both. |
+| `allowed_origins` | string | Comma-separated origin list (e.g. `https://admin.example, https://ops.example`). Origins in the list may embed the panel in an iframe (CSP `frame-ancestors`) and call the `/status` and `/update` resource endpoints cross-origin. Empty is the strictest default: embedding stays blocked and cross-origin browser requests are rejected. |
 
 Example:
 
@@ -87,8 +87,10 @@ plugins:
 
 Entries are trimmed of whitespace and trailing slashes and deduplicated. When
 `allowed_origins` is empty, the CSP `frame-ancestors` stays at `'none'` and
-the resource endpoints accept requests regardless of origin (same behavior as
-v0.1.2).
+the resource endpoints reject any request that provably comes from a
+cross-origin browser context (`Sec-Fetch-Site: cross-site`/`same-site`, or a
+cross-origin `Origin` header). Same-origin browser requests and CLI callers
+are always permitted.
 
 ## Use
 
@@ -164,11 +166,15 @@ C header; the host does not need it.
 
 - The panel page and its status/update endpoints are exposed as unauthenticated
   `resource` routes. Anyone able to reach the CLIProxyAPI HTTP port can open
-  the panel; without `allowed_origins` they can also trigger an update.
-- Configure `allowed_origins` to restrict the browser origins that can embed
-  the panel and call the endpoints. The check uses the `Origin` header
-  (falling back to `Referer`); requests without either header are treated as
-  same-origin and permitted so CLI callers still work.
+  the panel and trigger an update directly; the origin checks only constrain
+  cross-origin browser contexts, not direct access.
+- Cross-origin browser requests are rejected by default. Detection layers:
+  `Sec-Fetch-Site` when present (modern browsers), otherwise a cross-origin
+  `Origin` header. A `Referer` alone is ambiguous on legacy browsers, so it
+  is only checked once `allowed_origins` is configured. Requests without any
+  browser context headers are permitted so CLI callers still work.
+- Configure `allowed_origins` to let trusted origins embed the panel in an
+  iframe and call the endpoints cross-origin.
 - Update content is constrained by design: the plugin only replaces
   `management.html` with the digest-verified asset from the repository
   configured in `remote-management.panel-github-repository`. It never accepts
