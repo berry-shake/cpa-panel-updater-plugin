@@ -676,10 +676,8 @@
   function applyTip(node, value) {
     if (node.scrollWidth > node.clientWidth + 1) {
       node.setAttribute('data-tip', value);
-      node.setAttribute('title', value);
     } else {
       node.removeAttribute('data-tip');
-      node.removeAttribute('title');
     }
   }
 
