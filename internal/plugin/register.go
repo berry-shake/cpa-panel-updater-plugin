@@ -8,8 +8,8 @@ import (
 	"sync"
 
 	"github.com/berry-shake/cpa-panel-updater-plugin/internal/updater"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 	"gopkg.in/yaml.v3"
 )
 
@@ -20,6 +20,13 @@ const (
 
 	configAllowedOrigins = "allowed_origins"
 )
+
+// maxSchemaVersion is the newest plugin RPC contract this plugin implements.
+// Schema 6 makes the host return management JSON verbatim instead of
+// HTML-escaping its strings. It is pinned rather than taken from
+// pluginabi.SchemaVersion so an SDK bump cannot silently opt into newer
+// contracts or make older hosts refuse to load the plugin.
+const maxSchemaVersion = pluginabi.SchemaVersionRawManagementResponse
 
 // UpdateRunner abstracts the updater so management handlers can be tested with a fake.
 type UpdateRunner interface {
@@ -78,7 +85,8 @@ type managementRPCRequest struct {
 }
 
 type rpcLifecycleRequest struct {
-	ConfigYAML []byte `json:"config_yaml"`
+	ConfigYAML    []byte `json:"config_yaml"`
+	SchemaVersion uint32 `json:"schema_version"`
 }
 
 type pluginConfig struct {
@@ -101,7 +109,7 @@ func (s *Service) Call(method string, request []byte) []byte {
 	case pluginabi.MethodPluginRegister, pluginabi.MethodPluginReconfigure:
 		s.applyConfig(request)
 		return okEnvelope(rpcRegistration{
-			SchemaVersion: pluginabi.SchemaVersion,
+			SchemaVersion: negotiateSchemaVersion(request),
 			Metadata: pluginapi.Metadata{
 				Name:             "Panel Updater",
 				Version:          s.version,
@@ -159,6 +167,17 @@ func (s *Service) applyConfig(request []byte) {
 	s.mu.Lock()
 	s.allowedOrigins = origins
 	s.mu.Unlock()
+}
+
+// negotiateSchemaVersion answers plugin.register with the newest schema both
+// sides implement. Hosts advertise theirs in the lifecycle request; one that
+// advertises nothing only knows the original contract.
+func negotiateSchemaVersion(request []byte) uint32 {
+	var lifecycle rpcLifecycleRequest
+	if errUnmarshal := json.Unmarshal(request, &lifecycle); errUnmarshal != nil || lifecycle.SchemaVersion == 0 {
+		return 1
+	}
+	return min(lifecycle.SchemaVersion, maxSchemaVersion)
 }
 
 // AllowedOrigins returns a snapshot of the configured origin list. An empty

@@ -4,8 +4,9 @@ A CLIProxyAPI plugin for manually updating the built-in `management.html`
 control panel from a browser page. The status and update endpoints are
 `/v0/management` routes, so they require the CPA management key.
 
-The plugin reads `remote-management.panel-github-repository` directly from
-the same host configuration file selected by `--config`. Downloads use the
+The plugin reads `management.panel-github-repository` (legacy files:
+`remote-management.panel-github-repository`) directly from the same host
+configuration file selected by `--config`. Downloads use the
 host's `host.http.do` callback, so the host's `proxy-url` and request logging
 behavior apply automatically.
 
@@ -25,7 +26,7 @@ host can install the plugin from GitHub releases when a `store` block is
 configured:
 
 ```yaml
-remote-management:
+management:
   panel-github-repository: https://github.com/router-for-me/Cli-Proxy-API-Management-Center
 
 plugins:
@@ -38,8 +39,8 @@ plugins:
         name: Panel Updater
         description: Manually update the management center panel (management.html).
         author: berry-shake
-        version: 0.3.1
-        release-tag: v0.3.1
+        version: 0.3.2
+        release-tag: v0.3.2
         repository: https://github.com/berry-shake/cpa-panel-updater-plugin
         install:
           type: github-release
@@ -142,8 +143,10 @@ curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
 
 ## Update behavior
 
-1. Read `remote-management.panel-github-repository` from the active host
-   config (`--config`, `-config`, or the default `./config.yaml`).
+1. Read `management.panel-github-repository` from the active host config
+   (`--config`, `-config`, or the default `./config.yaml`). As in
+   CLIProxyAPI, the v8 field wins whenever present; legacy files without it
+   fall back to `remote-management.panel-github-repository`.
 2. Resolve the same static directory used by CLIProxyAPI:
    `MANAGEMENT_STATIC_PATH`, then `WRITABLE_PATH/static`, then
    `<config-directory>/static`.
@@ -164,8 +167,8 @@ returns HTTP 409.
 ```bash
 go test ./...
 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.3.1-dev' \
-  -o panel-updater-v0.3.1-dev.dylib .
+  -ldflags '-X main.pluginVersion=0.3.2-dev' \
+  -o panel-updater-v0.3.2-dev.dylib .
 ```
 
 Use `.so` on Linux and `.dll` on Windows. The c-shared build also produces a
@@ -181,7 +184,7 @@ C header; the host does not need it.
   so other sites cannot embed it.
 - Update content is constrained by design: the plugin only replaces
   `management.html` with the digest-verified asset from the repository
-  configured in `remote-management.panel-github-repository`. It never accepts
+  configured in `management.panel-github-repository`. It never accepts
   arbitrary URLs, file paths, or content from the request.
 - GitHub release digests are verified before replacement. The fallback page
   has no digest metadata; update responses clearly report `source: "fallback"`

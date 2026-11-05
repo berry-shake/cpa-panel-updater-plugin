@@ -70,7 +70,7 @@ import (
 
 	pluginruntime "github.com/berry-shake/cpa-panel-updater-plugin/internal/plugin"
 	"github.com/berry-shake/cpa-panel-updater-plugin/internal/updater"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
 )
 
 var (

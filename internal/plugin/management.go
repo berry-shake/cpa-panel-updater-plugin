@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/berry-shake/cpa-panel-updater-plugin/internal/updater"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 type configFileStatus struct {

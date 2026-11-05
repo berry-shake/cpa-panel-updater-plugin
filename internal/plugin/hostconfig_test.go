@@ -41,6 +41,51 @@ func TestResolveHostConfigReadsConfiguredRepository(t *testing.T) {
 	}
 }
 
+func TestResolveHostConfigRepositoryAcrossConfigLayouts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "v8 management", raw: "config-version: 8\nmanagement:\n  panel-github-repository: https://github.com/acme/v8\n", want: "https://github.com/acme/v8"},
+		{
+			name: "v8 wins over legacy",
+			raw:  "management:\n  panel-github-repository: https://github.com/acme/v8\nremote-management:\n  panel-github-repository: https://github.com/acme/legacy\n",
+			want: "https://github.com/acme/v8",
+		},
+		{
+			// An empty v8 value still overrides the legacy one, so the host
+			// and the plugin both fall back to the default repository.
+			name: "empty v8 value wins",
+			raw:  "management:\n  panel-github-repository: \"\"\nremote-management:\n  panel-github-repository: https://github.com/acme/legacy\n",
+			want: DefaultPanelGitHubRepository,
+		},
+		{
+			name: "legacy when v8 field absent",
+			raw:  "management:\n  allow-remote: true\nremote-management:\n  panel-github-repository: https://github.com/acme/legacy\n",
+			want: "https://github.com/acme/legacy",
+		},
+		{name: "neither configured", raw: "management:\n  allow-remote: true\n", want: DefaultPanelGitHubRepository},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			got := ResolveHostConfig(HostConfigEnvironment{
+				Args:     []string{"server"},
+				Getwd:    func() (string, error) { return "/srv", nil },
+				Getenv:   func(string) string { return "" },
+				ReadFile: func(string) ([]byte, error) { return []byte(tt.raw), nil },
+				Stat:     os.Stat,
+			})
+			if !got.ConfigReadable || got.PanelGitHubRepository != tt.want {
+				t.Fatalf("readable=%v repository=%q, want %q", got.ConfigReadable, got.PanelGitHubRepository, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveHostConfigMatchesHostConfigFlagForms(t *testing.T) {
 	t.Parallel()
 

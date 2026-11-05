@@ -59,10 +59,14 @@ func ResolveHostConfig(env HostConfigEnvironment) HostConfig {
 		return out
 	}
 
+	// The v8 layout moved remote-management to management. Like the host, the
+	// v8 field wins whenever present, even when empty.
+	type managementSection struct {
+		PanelGitHubRepository *string `yaml:"panel-github-repository"`
+	}
 	var parsed struct {
-		RemoteManagement struct {
-			PanelGitHubRepository string `yaml:"panel-github-repository"`
-		} `yaml:"remote-management"`
+		Management       managementSection `yaml:"management"`
+		RemoteManagement managementSection `yaml:"remote-management"`
 	}
 	if errUnmarshal := yaml.Unmarshal(raw, &parsed); errUnmarshal != nil {
 		out.ConfigError = fmt.Sprintf("parse host config: %v", errUnmarshal)
@@ -70,8 +74,14 @@ func ResolveHostConfig(env HostConfigEnvironment) HostConfig {
 	}
 
 	out.ConfigReadable = true
-	if repository := strings.TrimSpace(parsed.RemoteManagement.PanelGitHubRepository); repository != "" {
-		out.PanelGitHubRepository = repository
+	configured := parsed.Management.PanelGitHubRepository
+	if configured == nil {
+		configured = parsed.RemoteManagement.PanelGitHubRepository
+	}
+	if configured != nil {
+		if repository := strings.TrimSpace(*configured); repository != "" {
+			out.PanelGitHubRepository = repository
+		}
 	}
 	return out
 }

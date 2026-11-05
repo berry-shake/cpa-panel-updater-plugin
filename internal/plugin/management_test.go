@@ -11,8 +11,8 @@ import (
 	"testing"
 
 	"github.com/berry-shake/cpa-panel-updater-plugin/internal/updater"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
-	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginabi"
+	"github.com/router-for-me/CLIProxyAPI/v8/sdk/pluginapi"
 )
 
 type fakeRunner struct {
@@ -69,8 +69,8 @@ func TestRegisterAdvertisesManagementAPIAndAllowedOriginsField(t *testing.T) {
 
 	service := New("1.2.3", &fakeRunner{}, func() HostConfig { return HostConfig{} })
 	registration := decodeEnvelopeResult[rpcRegistration](t, service.Call(pluginabi.MethodPluginRegister, nil))
-	if registration.SchemaVersion != pluginabi.SchemaVersion {
-		t.Fatalf("SchemaVersion = %d", registration.SchemaVersion)
+	if registration.SchemaVersion != 1 {
+		t.Fatalf("SchemaVersion = %d, want 1 for a host that advertises none", registration.SchemaVersion)
 	}
 	if registration.Metadata.Version != "1.2.3" || registration.Metadata.Name != "Panel Updater" {
 		t.Fatalf("Metadata = %+v", registration.Metadata)
@@ -82,6 +82,34 @@ func TestRegisterAdvertisesManagementAPIAndAllowedOriginsField(t *testing.T) {
 	}
 	if !registration.Capabilities.ManagementAPI {
 		t.Fatal("management_api capability is false")
+	}
+}
+
+func TestRegisterNegotiatesSchemaVersion(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		payload []byte
+		want    uint32
+	}{
+		{name: "no payload", payload: nil, want: 1},
+		{name: "host without schema", payload: []byte(`{"config_yaml":null}`), want: 1},
+		{name: "older host", payload: []byte(`{"schema_version":3}`), want: 3},
+		{name: "host at pinned schema", payload: []byte(`{"schema_version":6}`), want: 6},
+		{name: "newer host", payload: []byte(`{"schema_version":10,"multi_auth_providers":true}`), want: maxSchemaVersion},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
+			for _, method := range []string{pluginabi.MethodPluginRegister, pluginabi.MethodPluginReconfigure} {
+				registration := decodeEnvelopeResult[rpcRegistration](t, service.Call(method, tt.payload))
+				if registration.SchemaVersion != tt.want {
+					t.Fatalf("%s schema_version = %d, want %d", method, registration.SchemaVersion, tt.want)
+				}
+			}
+		})
 	}
 }
 
