@@ -42,12 +42,11 @@ func decodeEnvelopeResult[T any](t *testing.T, raw []byte) T {
 	return out
 }
 
-func managementRequest(t *testing.T, method, path, callbackID string, headers http.Header) []byte {
+func managementRequest(t *testing.T, method, path, callbackID string) []byte {
 	t.Helper()
 	raw, errMarshal := json.Marshal(managementRPCRequest{
 		Method:         method,
 		Path:           path,
-		Headers:        headers,
 		HostCallbackID: callbackID,
 	})
 	if errMarshal != nil {
@@ -107,28 +106,38 @@ func TestRegisterAppliesAndReconfigureClearsAllowedOrigins(t *testing.T) {
 	}
 }
 
-func TestManagementRegisterDeclaresExpectedResources(t *testing.T) {
+func TestManagementRegisterSplitsResourcesAndManagementRoutes(t *testing.T) {
 	t.Parallel()
 
 	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
-	registration := decodeEnvelopeResult[managementRegistration](t, service.Call(pluginabi.MethodManagementRegister, []byte(`{}`)))
-	if len(registration.Resources) != 4 {
-		t.Fatalf("resources = %+v", registration.Resources)
-	}
+	raw := service.Call(pluginabi.MethodManagementRegister, []byte(`{}`))
+	registration := decodeEnvelopeResult[managementRegistration](t, raw)
 	paths := map[string]string{}
 	for _, res := range registration.Resources {
 		paths[res.Path] = res.Menu
 	}
-	for _, expected := range []string{"/panel", "/status", "/update", "/logo.png"} {
-		if _, ok := paths[expected]; !ok {
-			t.Fatalf("resources missing %s: %+v", expected, registration.Resources)
+	if len(registration.Resources) != 2 || paths["/panel"] != "Panel Updater" {
+		t.Fatalf("resources = %+v, want /panel menu entry and /logo.png", registration.Resources)
+	}
+	if menu, ok := paths["/logo.png"]; !ok || menu != "" {
+		t.Fatalf("/logo.png must have empty Menu to stay out of sidebar submenu, got %+v", registration.Resources)
+	}
+	for _, private := range []string{"/status", "/update"} {
+		if _, ok := paths[private]; ok {
+			t.Fatalf("%q must not be an unauthenticated resource", private)
 		}
 	}
-	if paths["/panel"] != "Panel Updater" {
-		t.Fatalf("/panel menu = %q", paths["/panel"])
+
+	// Decode with the host's shape: CPA reads routes into pluginapi.ManagementRoute.
+	host := decodeEnvelopeResult[struct {
+		Routes []pluginapi.ManagementRoute `json:"routes"`
+	}](t, raw)
+	got := map[string]bool{}
+	for _, route := range host.Routes {
+		got[route.Method+" "+route.Path] = true
 	}
-	if paths["/logo.png"] != "" {
-		t.Fatalf("/logo.png must have empty Menu to stay out of sidebar submenu, got %q", paths["/logo.png"])
+	if len(host.Routes) != 2 || !got[http.MethodGet+" "+statusPath] || !got[http.MethodPost+" "+updatePath] {
+		t.Fatalf("routes = %+v, want GET %s and POST %s", host.Routes, statusPath, updatePath)
 	}
 }
 
@@ -137,27 +146,27 @@ func TestPanelPageCSPReflectsAllowedOrigins(t *testing.T) {
 
 	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
 
-	// No origins configured → frame-ancestors 'none'.
+	// No origins configured → only the same-origin management panel may embed.
 	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, panelPath, "", nil),
+		managementRequest(t, http.MethodGet, panelPath, ""),
 	))
 	csp := response.Headers.Get("Content-Security-Policy")
-	if !strings.Contains(csp, "frame-ancestors 'none'") {
+	if !strings.HasSuffix(csp, "frame-ancestors 'self'") {
 		t.Fatalf("csp without origins = %q", csp)
 	}
 
-	// Configure origins → frame-ancestors 'self' <origins>.
+	// Configure origins → they are added after 'self'.
 	decodeEnvelopeResult[rpcRegistration](t, service.Call(
 		pluginabi.MethodPluginReconfigure,
 		lifecycleRequest(t, "allowed_origins: \"https://admin.example, https://ops.example\"\n"),
 	))
 	response = decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, panelPath, "", nil),
+		managementRequest(t, http.MethodGet, panelPath, ""),
 	))
 	csp = response.Headers.Get("Content-Security-Policy")
-	if !strings.Contains(csp, "frame-ancestors 'self' https://admin.example https://ops.example") {
+	if !strings.HasSuffix(csp, "frame-ancestors 'self' https://admin.example https://ops.example") {
 		t.Fatalf("csp with origins = %q", csp)
 	}
 }
@@ -182,7 +191,7 @@ func TestStatusReturnsHostConfigAndLocalPanelMetadata(t *testing.T) {
 
 	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, statusPath, "callback-status", nil),
+		managementRequest(t, http.MethodGet, statusPath, "callback-status"),
 	))
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("StatusCode = %d, body = %s", response.StatusCode, response.Body)
@@ -220,7 +229,7 @@ func TestUpdateForwardsRepositoryDirectoryAndCallbackID(t *testing.T) {
 
 	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, updatePath, "callback-update", nil),
+		managementRequest(t, http.MethodPost, updatePath, "callback-update"),
 	))
 	if response.StatusCode != http.StatusOK {
 		t.Fatalf("StatusCode = %d, body = %s", response.StatusCode, response.Body)
@@ -246,7 +255,7 @@ func TestUpdateMapsBusyAndOtherErrors(t *testing.T) {
 			service := New("dev", &fakeRunner{err: tt.err}, func() HostConfig { return HostConfig{StaticDir: "/tmp/static"} })
 			response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 				pluginabi.MethodManagementHandle,
-				managementRequest(t, http.MethodGet, updatePath, "callback", nil),
+				managementRequest(t, http.MethodPost, updatePath, "callback"),
 			))
 			if response.StatusCode != tt.want {
 				t.Fatalf("StatusCode = %d, want %d", response.StatusCode, tt.want)
@@ -255,105 +264,59 @@ func TestUpdateMapsBusyAndOtherErrors(t *testing.T) {
 	}
 }
 
-func TestNonGetMethodsRejected(t *testing.T) {
+func TestManagementHandleRejectsWrongMethodAndUnknownPath(t *testing.T) {
+	t.Parallel()
+
+	runner := &fakeRunner{}
+	service := New("dev", runner, func() HostConfig { return HostConfig{} })
+	tests := []struct {
+		method string
+		path   string
+		want   int
+	}{
+		{method: http.MethodGet, path: updatePath, want: http.StatusMethodNotAllowed},
+		{method: http.MethodPost, path: statusPath, want: http.StatusMethodNotAllowed},
+		{method: http.MethodPost, path: panelPath, want: http.StatusMethodNotAllowed},
+		{method: http.MethodPost, path: logoPath, want: http.StatusMethodNotAllowed},
+		// The old unauthenticated resource paths must be gone.
+		{method: http.MethodGet, path: "/v0/resource/plugins/panel-updater/status", want: http.StatusNotFound},
+		{method: http.MethodGet, path: "/v0/resource/plugins/panel-updater/update", want: http.StatusNotFound},
+		{method: http.MethodGet, path: "/v0/management/plugins/panel-updater/nope", want: http.StatusNotFound},
+	}
+	for _, tt := range tests {
+		response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
+			pluginabi.MethodManagementHandle,
+			managementRequest(t, tt.method, tt.path, "cb"),
+		))
+		if response.StatusCode != tt.want {
+			t.Fatalf("%s %s: StatusCode = %d, want %d, body=%s", tt.method, tt.path, response.StatusCode, tt.want, response.Body)
+		}
+	}
+	if runner.got != (updater.UpdateRequest{}) {
+		t.Fatalf("rejected requests must not run the updater, got %+v", runner.got)
+	}
+}
+
+func TestPanelPageUsesManagementRoutes(t *testing.T) {
 	t.Parallel()
 
 	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
 	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodPost, updatePath, "", nil),
-	))
-	if response.StatusCode != http.StatusMethodNotAllowed {
-		t.Fatalf("StatusCode = %d, want %d", response.StatusCode, http.StatusMethodNotAllowed)
-	}
-}
-
-func TestOriginEnforcementRejectsUnlistedOrigins(t *testing.T) {
-	t.Parallel()
-
-	service := New("dev", &fakeRunner{result: updater.Result{Message: "ok"}}, func() HostConfig { return HostConfig{StaticDir: "/tmp"} })
-	decodeEnvelopeResult[rpcRegistration](t, service.Call(
-		pluginabi.MethodPluginRegister,
-		lifecycleRequest(t, "allowed_origins: \"https://admin.example\"\n"),
-	))
-
-	tests := []struct {
-		name    string
-		headers http.Header
-		want    int
-	}{
-		{name: "missing origin and referer allowed", headers: nil, want: http.StatusOK},
-		{name: "listed origin passes", headers: http.Header{"Origin": []string{"https://admin.example"}}, want: http.StatusOK},
-		{name: "listed origin passes with cross-site fetch metadata", headers: http.Header{"Origin": []string{"https://admin.example"}, "Sec-Fetch-Site": []string{"cross-site"}}, want: http.StatusOK},
-		{name: "unlisted origin rejected", headers: http.Header{"Origin": []string{"https://evil.example"}}, want: http.StatusForbidden},
-		{name: "listed referer passes", headers: http.Header{"Referer": []string{"https://admin.example/some/page"}}, want: http.StatusOK},
-		{name: "unlisted referer rejected", headers: http.Header{"Referer": []string{"https://evil.example/page"}}, want: http.StatusForbidden},
-	}
-	for _, tt := range tests {
-		response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-			pluginabi.MethodManagementHandle,
-			managementRequest(t, http.MethodGet, updatePath, "cb", tt.headers),
-		))
-		if response.StatusCode != tt.want {
-			t.Fatalf("%s: StatusCode = %d, want %d, body=%s", tt.name, response.StatusCode, tt.want, response.Body)
-		}
-	}
-}
-
-func TestOriginEnforcementDefaultRejectsCrossOrigin(t *testing.T) {
-	t.Parallel()
-
-	service := New("dev", &fakeRunner{result: updater.Result{Message: "ok"}}, func() HostConfig { return HostConfig{StaticDir: "/tmp"} })
-	// No allowed_origins configured → cross-origin browser requests rejected,
-	// same-origin and non-browser requests permitted.
-	tests := []struct {
-		name    string
-		headers http.Header
-		want    int
-	}{
-		{name: "cli without browser headers allowed", headers: nil, want: http.StatusOK},
-		{name: "user navigation allowed", headers: http.Header{"Sec-Fetch-Site": []string{"none"}}, want: http.StatusOK},
-		{name: "same-origin fetch allowed", headers: http.Header{"Sec-Fetch-Site": []string{"same-origin"}}, want: http.StatusOK},
-		{name: "cross-site fetch rejected", headers: http.Header{"Sec-Fetch-Site": []string{"cross-site"}}, want: http.StatusForbidden},
-		{name: "same-site fetch rejected", headers: http.Header{"Sec-Fetch-Site": []string{"same-site"}}, want: http.StatusForbidden},
-		{name: "origin header rejected", headers: http.Header{"Origin": []string{"https://anywhere.example"}}, want: http.StatusForbidden},
-		{name: "null origin rejected", headers: http.Header{"Origin": []string{"null"}}, want: http.StatusForbidden},
-		{name: "legacy referer-only allowed", headers: http.Header{"Referer": []string{"https://anywhere.example/page"}}, want: http.StatusOK},
-	}
-	for _, tt := range tests {
-		response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-			pluginabi.MethodManagementHandle,
-			managementRequest(t, http.MethodGet, updatePath, "cb", tt.headers),
-		))
-		if response.StatusCode != tt.want {
-			t.Fatalf("%s: StatusCode = %d, want %d, body=%s", tt.name, response.StatusCode, tt.want, response.Body)
-		}
-	}
-}
-
-func TestPanelResourceIsUnauthenticated(t *testing.T) {
-	t.Parallel()
-
-	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
-	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
-		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, panelPath, "", nil),
+		managementRequest(t, http.MethodGet, panelPath, ""),
 	))
 	body := string(response.Body)
-	for _, expected := range []string{
-		"/v0/resource/plugins/panel-updater/status",
-		"/v0/resource/plugins/panel-updater/update",
-	} {
+	for _, expected := range []string{statusPath, updatePath, "Authorization", "'Bearer '", "cli-proxy-auth", "method: 'POST'"} {
 		if !strings.Contains(body, expected) {
 			t.Errorf("page does not contain %q", expected)
 		}
 	}
-	for _, unwanted := range []string{
-		"Authorization: Bearer",
-		"management-key",
+	for _, stale := range []string{
+		"/v0/resource/plugins/panel-updater/status",
+		"/v0/resource/plugins/panel-updater/update",
 	} {
-		if strings.Contains(body, unwanted) {
-			t.Errorf("page unexpectedly contains %q", unwanted)
+		if strings.Contains(body, stale) {
+			t.Errorf("page still references %q", stale)
 		}
 	}
 }
@@ -364,7 +327,7 @@ func TestPanelResourceEmbedsEnglishAndChineseDictionaries(t *testing.T) {
 	service := New("dev", &fakeRunner{}, func() HostConfig { return HostConfig{} })
 	response := decodeEnvelopeResult[pluginapi.ManagementResponse](t, service.Call(
 		pluginabi.MethodManagementHandle,
-		managementRequest(t, http.MethodGet, panelPath, "", nil),
+		managementRequest(t, http.MethodGet, panelPath, ""),
 	))
 	body := string(response.Body)
 	for _, expected := range []string{

@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	statusPath = "/v0/resource/plugins/panel-updater/status"
-	updatePath = "/v0/resource/plugins/panel-updater/update"
+	statusPath = "/v0/management/plugins/panel-updater/status"
+	updatePath = "/v0/management/plugins/panel-updater/update"
 	panelPath  = "/v0/resource/plugins/panel-updater/panel"
 
 	configAllowedOrigins = "allowed_origins"
@@ -55,8 +55,17 @@ type resourceDeclaration struct {
 	Description string `json:"description,omitempty"`
 }
 
+// routeDeclaration is a /v0/management route; CPA checks the management key
+// before forwarding the request to the plugin.
+type routeDeclaration struct {
+	Method      string `json:"method"`
+	Path        string `json:"path"`
+	Description string `json:"description,omitempty"`
+}
+
 type managementRegistration struct {
-	Resources []resourceDeclaration `json:"resources"`
+	Routes    []routeDeclaration    `json:"routes,omitempty"`
+	Resources []resourceDeclaration `json:"resources,omitempty"`
 }
 
 type managementRPCRequest struct {
@@ -103,7 +112,7 @@ func (s *Service) Call(method string, request []byte) []byte {
 					{
 						Name:        configAllowedOrigins,
 						Type:        pluginapi.ConfigFieldTypeString,
-						Description: "受信任的来源列表（逗号分隔），允许以 iframe 嵌入面板并跨源调用资源接口。留空为最严格默认：禁止任何 iframe 嵌入（frame-ancestors 'none'），并拒绝跨源浏览器请求。",
+						Description: "额外允许以 iframe 嵌入面板页面的来源列表（逗号分隔）。留空时只允许同源（CPA 管理面板）嵌入（frame-ancestors 'self'）。数据接口走 /v0/management，始终需要管理密钥。",
 					},
 				},
 			},
@@ -113,10 +122,12 @@ func (s *Service) Call(method string, request []byte) []byte {
 		return okEnvelope(struct{}{})
 	case pluginabi.MethodManagementRegister:
 		return okEnvelope(managementRegistration{
+			Routes: []routeDeclaration{
+				{Method: http.MethodGet, Path: statusPath, Description: "Show the configured panel repository and local management.html state."},
+				{Method: http.MethodPost, Path: updatePath, Description: "Download and atomically replace management.html."},
+			},
 			Resources: []resourceDeclaration{
 				{Path: "/panel", Menu: "Panel Updater", Description: "Manually update the CLIProxyAPI management panel."},
-				{Path: "/status", Description: "Show the configured panel repository and local management.html state."},
-				{Path: "/update", Description: "Download and atomically replace management.html."},
 				{Path: "/logo.png", Description: "Plugin logo served to the management panel sidebar."},
 			},
 		})
@@ -150,7 +161,8 @@ func (s *Service) applyConfig(request []byte) {
 	s.mu.Unlock()
 }
 
-// AllowedOrigins returns a snapshot of the configured origin list.
+// AllowedOrigins returns a snapshot of the configured origin list. An empty
+// result keeps panel embedding same-origin only.
 func (s *Service) AllowedOrigins() []string {
 	s.mu.RLock()
 	defer s.mu.RUnlock()

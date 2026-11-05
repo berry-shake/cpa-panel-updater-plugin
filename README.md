@@ -1,7 +1,8 @@
 # CLIProxyAPI Panel Updater Plugin
 
 A CLIProxyAPI plugin for manually updating the built-in `management.html`
-control panel from a browser page — no management key required.
+control panel from a browser page. The status and update endpoints are
+`/v0/management` routes, so they require the CPA management key.
 
 The plugin reads `remote-management.panel-github-repository` directly from
 the same host configuration file selected by `--config`. Downloads use the
@@ -37,8 +38,8 @@ plugins:
         name: Panel Updater
         description: Manually update the management center panel (management.html).
         author: berry-shake
-        version: 0.2.1
-        release-tag: v0.2.1
+        version: 0.3.0
+        release-tag: v0.3.0
         repository: https://github.com/berry-shake/cpa-panel-updater-plugin
         install:
           type: github-release
@@ -72,7 +73,7 @@ plugins:
 
 | Key | Type | Description |
 | --- | --- | --- |
-| `allowed_origins` | string | Comma-separated origin list (e.g. `https://admin.example, https://ops.example`). Origins in the list may embed the panel in an iframe (CSP `frame-ancestors`) and call the `/status` and `/update` resource endpoints cross-origin. Empty is the strictest default: embedding stays blocked and cross-origin browser requests are rejected. |
+| `allowed_origins` | string | Comma-separated list of extra origins (e.g. `https://admin.example, https://ops.example`) that may embed the panel page in an iframe (CSP `frame-ancestors`). Empty (default) allows only same-origin embedding, which is what the CPA management panel needs. The status and update endpoints always require the management key regardless of this setting. |
 
 Example:
 
@@ -85,12 +86,9 @@ plugins:
       allowed_origins: "https://admin.example.com, https://ops.example.com"
 ```
 
-Entries are trimmed of whitespace and trailing slashes and deduplicated. When
-`allowed_origins` is empty, the CSP `frame-ancestors` stays at `'none'` and
-the resource endpoints reject any request that provably comes from a
-cross-origin browser context (`Sec-Fetch-Site: cross-site`/`same-site`, or a
-cross-origin `Origin` header). Same-origin browser requests and CLI callers
-are always permitted.
+Entries are trimmed of whitespace and trailing slashes and deduplicated, then
+appended after `'self'`. When `allowed_origins` is empty, the CSP is
+`frame-ancestors 'self'`.
 
 ## Use
 
@@ -106,9 +104,16 @@ Open:
 http://127.0.0.1:<port>/v0/resource/plugins/panel-updater/panel
 ```
 
-Click **Check status** to inspect the current `management.html`, then click
-**Update now** to pull the latest release and atomically replace the file.
-No key entry is needed.
+Opened from the **Panel Updater** menu inside the CPA management panel, the
+page reuses the management key the panel remembered ("remember password"),
+in either the official panel or the CPAMP storage format. It only uses a key
+saved for this origin and never writes it back. Opened directly, or when the
+host rejects the saved key, the page asks for the key; it stays in page
+memory only, and a reload asks again.
+
+The page loads the current `management.html` status on open. Click
+**Refresh status** to check again, then **Update now** to pull the latest
+release and atomically replace the file.
 
 The page is localized in English and Simplified Chinese. It picks the
 default language from `navigator.language` (any `zh-*` tag selects Chinese;
@@ -116,19 +121,23 @@ everything else falls back to English), and the choice can be overridden
 with the EN/中文 toggle in the header. The selection is remembered in
 `localStorage` under `cliproxy-panel-updater-lang`.
 
-Public resource endpoints (GET only):
+Endpoints:
 
 ```text
-GET /v0/resource/plugins/panel-updater/panel
-GET /v0/resource/plugins/panel-updater/status
-GET /v0/resource/plugins/panel-updater/update
+GET  /v0/resource/plugins/panel-updater/panel      page shell, no auth, no data
+GET  /v0/management/plugins/panel-updater/status   management key required
+POST /v0/management/plugins/panel-updater/update   management key required
 ```
 
-Example:
+The host's management middleware checks `Authorization: Bearer <management key>`
+(plus its remote-management and IP ban rules) before forwarding the request,
+so a missing or wrong key gets 401/403 from the host itself. Example:
 
 ```bash
-curl http://127.0.0.1:8317/v0/resource/plugins/panel-updater/status
-curl http://127.0.0.1:8317/v0/resource/plugins/panel-updater/update
+curl -H "Authorization: Bearer $MANAGEMENT_KEY" \
+  http://127.0.0.1:8317/v0/management/plugins/panel-updater/status
+curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
+  http://127.0.0.1:8317/v0/management/plugins/panel-updater/update
 ```
 
 ## Update behavior
@@ -155,8 +164,8 @@ returns HTTP 409.
 ```bash
 go test ./...
 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.2.1-dev' \
-  -o panel-updater-v0.2.1-dev.dylib .
+  -ldflags '-X main.pluginVersion=0.3.0-dev' \
+  -o panel-updater-v0.3.0-dev.dylib .
 ```
 
 Use `.so` on Linux and `.dll` on Windows. The c-shared build also produces a
@@ -164,17 +173,12 @@ C header; the host does not need it.
 
 ## Security notes
 
-- The panel page and its status/update endpoints are exposed as unauthenticated
-  `resource` routes. Anyone able to reach the CLIProxyAPI HTTP port can open
-  the panel and trigger an update directly; the origin checks only constrain
-  cross-origin browser contexts, not direct access.
-- Cross-origin browser requests are rejected by default. Detection layers:
-  `Sec-Fetch-Site` when present (modern browsers), otherwise a cross-origin
-  `Origin` header. A `Referer` alone is ambiguous on legacy browsers, so it
-  is only checked once `allowed_origins` is configured. Requests without any
-  browser context headers are permitted so CLI callers still work.
-- Configure `allowed_origins` to let trusted origins embed the panel in an
-  iframe and call the endpoints cross-origin.
+- Reading status and triggering an update both require the CPA management
+  key: they are `/v0/management` routes guarded by the host. Only the page
+  shell and logo are public `/v0/resource` assets, and they contain no data.
+- Update is POST only, so a link, image tag or prefetch cannot trigger it.
+- The panel page sends `frame-ancestors 'self'` (plus any `allowed_origins`),
+  so other sites cannot embed it.
 - Update content is constrained by design: the plugin only replaces
   `management.html` with the digest-verified asset from the repository
   configured in `remote-management.panel-github-repository`. It never accepts
