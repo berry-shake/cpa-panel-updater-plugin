@@ -517,7 +517,6 @@
       'log.updateCompleted': 'Update completed.',
       'log.updateFailed': 'Update failed: {msg}',
       'log.updateGithub': 'Management panel updated from the GitHub release.',
-      'log.updateFallback': 'Management panel updated from the unverified fallback page because GitHub was unreachable.',
       'log.updateUpToDate': 'Management panel is already up to date.',
       'log.source': 'source: {value}',
       'log.hash': 'sha256: {value}',
@@ -566,7 +565,6 @@
       'log.updateCompleted': '更新完成。',
       'log.updateFailed': '更新失败：{msg}',
       'log.updateGithub': '已从 GitHub release 更新面板。',
-      'log.updateFallback': 'GitHub 不可达，已使用未校验的备用页面更新面板。',
       'log.updateUpToDate': '面板已是最新版本，无需更新。',
       'log.source': '来源：{value}',
       'log.hash': '摘要：{value}',
@@ -870,7 +868,6 @@
   function updateHeadlineKey(data) {
     const src = (data && typeof data.source === 'string') ? data.source : '';
     if (src === 'up-to-date') return 'log.updateUpToDate';
-    if (src === 'fallback') return 'log.updateFallback';
     if (src === 'github') return 'log.updateGithub';
     return 'log.updateCompleted';
   }

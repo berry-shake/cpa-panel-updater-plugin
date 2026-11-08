@@ -20,9 +20,7 @@ const (
 	AssetName              = "management.html"
 	DefaultPanelRepository = "https://github.com/router-for-me/Cli-Proxy-API-Management-Center"
 	DefaultReleaseURL      = "https://api.github.com/repos/router-for-me/Cli-Proxy-API-Management-Center/releases/latest"
-	FallbackURL            = "https://cpamc.router-for.me/"
 	SourceGitHub           = "github"
-	SourceFallback         = "fallback"
 	SourceUpToDate         = "up-to-date"
 	userAgent              = "cliproxy-panel-updater"
 	maxReleaseResponseSize = 2 << 20
@@ -113,30 +111,7 @@ func (u *Updater) Update(ctx context.Context, req UpdateRequest) (Result, error)
 		return Result{}, fmt.Errorf("hash local management asset: %w", errHash)
 	}
 
-	result, errGitHub := u.updateFromGitHub(ctx, req, localPath, localHash)
-	if errGitHub == nil {
-		return result, nil
-	}
-	if errors.Is(errGitHub, ErrDigestMismatch) || localHash != "" {
-		return Result{}, errGitHub
-	}
-
-	fallbackData, errFallback := u.get(ctx, req.HostCallbackID, FallbackURL, maxAssetDownloadSize, http.Header{
-		"User-Agent": []string{userAgent},
-	})
-	if errFallback != nil {
-		return Result{}, fmt.Errorf("github update failed: %v; fallback failed: %w", errGitHub, errFallback)
-	}
-	fallbackHash := hashBytes(fallbackData)
-	if errWrite := atomicWriteFile(localPath, fallbackData); errWrite != nil {
-		return Result{}, fmt.Errorf("persist fallback management asset: %w", errWrite)
-	}
-	return Result{
-		Updated: true,
-		Hash:    fallbackHash,
-		Source:  SourceFallback,
-		Message: "Management panel updated from the unverified fallback page because GitHub update failed.",
-	}, nil
+	return u.updateFromGitHub(ctx, req, localPath, localHash)
 }
 
 func (u *Updater) updateFromGitHub(ctx context.Context, req UpdateRequest, localPath, localHash string) (Result, error) {

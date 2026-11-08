@@ -151,36 +151,29 @@ func TestUpdateSkipsDownloadWhenDigestMatches(t *testing.T) {
 	}
 }
 
-func TestUpdateUsesFallbackWhenGitHubFailsAndLocalFileIsMissing(t *testing.T) {
+func TestUpdateFailsWithoutWritingWhenGitHubFailsAndLocalFileIsMissing(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
 	path := filepath.Join(dir, AssetName)
-	fallback := []byte("fallback panel")
 	releaseURL := ResolveReleaseURL(DefaultPanelRepository)
-	doer := &fakeDoer{
-		responses: map[string]HTTPResponse{
-			FallbackURL: {StatusCode: http.StatusOK, Body: fallback},
-		},
-		errors: map[string]error{releaseURL: errors.New("github unavailable")},
-	}
+	doer := &fakeDoer{errors: map[string]error{releaseURL: errors.New("github unavailable")}}
 
 	result, errUpdate := New(doer).Update(context.Background(), UpdateRequest{
 		StaticDir:             dir,
 		PanelGitHubRepository: DefaultPanelRepository,
 	})
-	if errUpdate != nil {
-		t.Fatal(errUpdate)
+	if errUpdate == nil || !strings.Contains(errUpdate.Error(), "github unavailable") {
+		t.Fatalf("error = %v, want github failure", errUpdate)
 	}
-	if !result.Updated || result.Source != SourceFallback || !strings.Contains(result.Message, "unverified") {
-		t.Fatalf("result = %+v", result)
+	if result != (Result{}) {
+		t.Fatalf("result = %+v, want zero value", result)
 	}
-	got, errRead := os.ReadFile(path)
-	if errRead != nil {
-		t.Fatal(errRead)
+	if _, errStat := os.Stat(path); !errors.Is(errStat, os.ErrNotExist) {
+		t.Fatalf("panel file stat error = %v, want not exist", errStat)
 	}
-	if string(got) != string(fallback) {
-		t.Fatalf("panel = %q", got)
+	if doer.callCount() != 1 {
+		t.Fatalf("HTTP calls = %d, want 1", doer.callCount())
 	}
 }
 
@@ -194,12 +187,7 @@ func TestUpdateLeavesExistingFileWhenGitHubFails(t *testing.T) {
 		t.Fatal(errWrite)
 	}
 	releaseURL := ResolveReleaseURL(DefaultPanelRepository)
-	doer := &fakeDoer{
-		responses: map[string]HTTPResponse{
-			FallbackURL: {StatusCode: http.StatusOK, Body: []byte("must not be used")},
-		},
-		errors: map[string]error{releaseURL: errors.New("github unavailable")},
-	}
+	doer := &fakeDoer{errors: map[string]error{releaseURL: errors.New("github unavailable")}}
 
 	_, errUpdate := New(doer).Update(context.Background(), UpdateRequest{
 		StaticDir:             dir,
@@ -215,14 +203,12 @@ func TestUpdateLeavesExistingFileWhenGitHubFails(t *testing.T) {
 	if string(got) != string(old) {
 		t.Fatalf("panel changed to %q", got)
 	}
-	for _, call := range doer.calls {
-		if call.URL == FallbackURL {
-			t.Fatal("fallback was called while a local panel existed")
-		}
+	if doer.callCount() != 1 {
+		t.Fatalf("HTTP calls = %d, want 1", doer.callCount())
 	}
 }
 
-func TestUpdateRejectsDigestMismatchWithoutFallback(t *testing.T) {
+func TestUpdateRejectsDigestMismatch(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
@@ -236,7 +222,6 @@ func TestUpdateRejectsDigestMismatchWithoutFallback(t *testing.T) {
 	doer := &fakeDoer{responses: map[string]HTTPResponse{
 		releaseURL:  {StatusCode: http.StatusOK, Body: releaseBody(t, downloadURL, "sha256:"+testSHA256([]byte("expected")))},
 		downloadURL: {StatusCode: http.StatusOK, Body: []byte("tampered")},
-		FallbackURL: {StatusCode: http.StatusOK, Body: []byte("must not be used")},
 	}}
 
 	_, errUpdate := New(doer).Update(context.Background(), UpdateRequest{
@@ -253,10 +238,8 @@ func TestUpdateRejectsDigestMismatchWithoutFallback(t *testing.T) {
 	if string(got) != string(old) {
 		t.Fatalf("panel changed to %q", got)
 	}
-	for _, call := range doer.calls {
-		if call.URL == FallbackURL {
-			t.Fatal("fallback was called after digest mismatch")
-		}
+	if doer.callCount() != 2 {
+		t.Fatalf("HTTP calls = %d, want 2", doer.callCount())
 	}
 }
 

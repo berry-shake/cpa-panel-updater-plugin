@@ -39,8 +39,8 @@ plugins:
         name: Panel Updater
         description: Manually update the management center panel (management.html).
         author: berry-shake
-        version: 0.2.4
-        release-tag: v0.2.4
+        version: 0.2.5
+        release-tag: v0.2.5
         repository: https://github.com/berry-shake/cpa-panel-updater-plugin
         install:
           type: github-release
@@ -154,10 +154,9 @@ curl -X POST -H "Authorization: Bearer $MANAGEMENT_KEY" \
 4. Skip the download when the local SHA-256 already matches the release
    digest.
 5. Verify the downloaded digest and atomically replace `management.html`.
-6. If GitHub metadata or asset download fails while the local panel is
-   missing, use `https://cpamc.router-for.me/` as an unverified fallback.
-   Preserve an existing panel on GitHub failure. Digest mismatch never falls
-   back and never replaces the current file.
+6. If GitHub metadata or asset download fails, or the digest does not match,
+   the update fails and nothing is written: an existing panel is kept, and a
+   missing panel stays missing. There is no unverified fallback source.
 
 Only one update can run inside the plugin at a time. A concurrent request
 returns HTTP 409.
@@ -167,8 +166,8 @@ returns HTTP 409.
 ```bash
 go test ./...
 go build -buildmode=c-shared \
-  -ldflags '-X main.pluginVersion=0.2.4-dev' \
-  -o panel-updater-v0.2.4-dev.dylib .
+  -ldflags '-X main.pluginVersion=0.2.5-dev' \
+  -o panel-updater-v0.2.5-dev.dylib .
 ```
 
 Use `.so` on Linux and `.dll` on Windows. The c-shared build also produces a
@@ -186,8 +185,7 @@ C header; the host does not need it.
   `management.html` with the digest-verified asset from the repository
   configured in `management.panel-github-repository`. It never accepts
   arbitrary URLs, file paths, or content from the request.
-- GitHub release digests are verified before replacement. The fallback page
-  has no digest metadata; update responses clearly report `source: "fallback"`
-  when it is used.
+- GitHub release digests are verified before replacement. The plugin never
+  downloads the panel from any other source.
 - Do not expose the CLIProxyAPI HTTP port to untrusted networks without
   additional protection (reverse proxy auth, IP allow-list, VPN, etc.).
